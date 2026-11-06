@@ -1,0 +1,62 @@
+<section class="wrapper wrapper-content management-page management-page--terminal" aria-labelledby="terminal-disabled-title">
+    <header class="dashboard-page-header management-page-header">
+        <div>
+            <div class="dashboard-page-kicker" data-i18n-zh="面板终端" data-i18n-en="Web terminal">面板终端</div>
+            <h1 id="terminal-disabled-title" langtag="word-terminal">终端</h1>
+            <p data-i18n-zh="在浏览器内连接在线客户端的交互式 Shell。" data-i18n-en="Open an interactive shell to online clients from the browser.">在浏览器内连接在线客户端的交互式 Shell。</p>
+        </div>
+    </header>
+
+    <div class="nps-feature-off" role="status">
+        <div class="nps-feature-off__panel">
+            <div class="nps-feature-off__icon" aria-hidden="true">
+                <i class="fa fa-terminal"></i>
+            </div>
+            <div class="nps-feature-off__badge" data-i18n-zh="当前未启用" data-i18n-en="Currently disabled">当前未启用</div>
+            <h2 class="nps-feature-off__title" data-i18n-zh="Web 终端已关闭" data-i18n-en="Web terminal is turned off">Web 终端已关闭</h2>
+            <p class="nps-feature-off__desc" data-i18n-zh="出于安全考虑，面板终端默认关闭。需要时由管理员开启配置并重启服务端。" data-i18n-en="The panel terminal is off by default for safety. An admin can enable it and restart the server.">出于安全考虑，面板终端默认关闭。需要时由管理员开启配置并重启服务端。</p>
+
+            <ol class="nps-feature-off__steps">
+                <li>
+                    <span class="nps-feature-off__step-num">1</span>
+                    <div>
+                        <strong data-i18n-zh="打开配置" data-i18n-en="Open config">打开配置</strong>
+                        <span data-i18n-zh="编辑 conf/nps.conf，或使用服务端配置页。" data-i18n-en="Edit conf/nps.conf, or use Server config.">编辑 <code>conf/nps.conf</code>，或使用服务端配置页。</span>
+                    </div>
+                </li>
+                <li>
+                    <span class="nps-feature-off__step-num">2</span>
+                    <div>
+                        <strong data-i18n-zh="开启开关" data-i18n-en="Turn it on">开启开关</strong>
+                        <span>在「全局参数」开启「面板 Web 终端」，或迁移前在 conf 设 <code>allow_web_terminal=true</code>。</span>
+                    </div>
+                </li>
+                <li>
+                    <span class="nps-feature-off__step-num">3</span>
+                    <div>
+                        <strong data-i18n-zh="重启生效" data-i18n-en="Restart">重启生效</strong>
+                        <span data-i18n-zh="重启 nps 服务后刷新本页即可使用。" data-i18n-en="Restart the nps service, then refresh this page.">重启 nps 服务后刷新本页即可使用。</span>
+                    </div>
+                </li>
+            </ol>
+
+            <pre class="nps-feature-off__code" aria-label="配置示例">Web → 全局参数 → 面板 Web 终端 = 开
+（保存立即生效，无需重启）</pre>
+
+            <div class="nps-feature-off__actions">
+                {{if .isAdmin}}
+                <a class="btn btn-primary" href="{{.web_base_url}}/serverconfig/index">
+                    <i class="fa fa-file-alt" aria-hidden="true"></i>
+                    <span langtag="word-serverconfig">服务端配置</span>
+                </a>
+                {{end}}
+                <a class="btn btn-outline btn-primary" href="{{.web_base_url}}/">
+                    <i class="fa fa-tachometer-alt" aria-hidden="true"></i>
+                    <span langtag="word-dashboard">仪表盘</span>
+                </a>
+            </div>
+
+            <p class="nps-feature-off__note" data-i18n-zh="提示：仅应在可信网络或配合强认证后开启；终端可执行任意命令。" data-i18n-en="Note: enable only on trusted networks or with strong auth; the terminal can run arbitrary commands.">提示：仅应在可信网络或配合强认证后开启；终端可执行任意命令。</p>
+        </div>
+    </div>
+</section>

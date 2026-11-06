@@ -1,0 +1,71 @@
+{
+  "ua_blacklist": [
+    "sqlmap",
+    "masscan"
+  ],
+  "ua_blacklist_items": [
+    {
+      "value": "sqlmap",
+      "remark": "扫描器 · 示例",
+      "enable": true
+    },
+    {
+      "value": "masscan",
+      "remark": "扫描器 · 示例",
+      "enable": true
+    }
+  ],
+  "ua_blacklist_is_regex": false,
+  "foreign_allow_codes": [
+    "CN"
+  ],
+  "ip_allowlist": [
+    "127.0.0.1",
+    "10.0.0.0/8"
+  ],
+  "ip_allowlist_items": [
+    {
+      "value": "127.0.0.1",
+      "remark": "本机",
+      "enable": true
+    },
+    {
+      "value": "10.0.0.0/8",
+      "remark": "办公网示例",
+      "enable": true
+    }
+  ],
+  "rules": [
+    {
+      "id": "deny-wp-login",
+      "enable": true,
+      "action": "deny",
+      "priority": 100,
+      "scope": "http",
+      "remark": "WordPress 登录/XML-RPC",
+      "when": {
+        "methods": [
+          "GET",
+          "POST"
+        ],
+        "path_prefix": [
+          "/wp-login.php",
+          "/xmlrpc.php"
+        ]
+      }
+    },
+    {
+      "id": "allow-office-ip",
+      "enable": true,
+      "action": "allow",
+      "priority": 10,
+      "scope": "all",
+      "remark": "示例办公网放行（与 ip_allowlist 二选一即可）",
+      "when": {
+        "ip_in": [
+          "203.0.113.0/24"
+        ]
+      }
+    }
+  ]
+}

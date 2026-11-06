@@ -1,0 +1,88 @@
+<div class="wrapper wrapper-content animated fadeInRight">
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="ibox float-e-margins">
+                <div class="ibox-title">
+                    <h5>用户管理</h5>
+                </div>
+                <div class="ibox-content">
+                    <div id="toolbar">
+                        <a href="{{.web_base_url}}/user/add" class="btn btn-primary dim">
+                            <i class="fa fa-fw fa-lg fa-plus"></i> <span langtag="word-add">添加</span></a>
+                    </div>
+                    <table id="table"></table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$('#table').npsTable({
+    toolbar: "#toolbar",
+    method: 'post',
+    url: "{{.web_base_url}}/user/list",
+    contentType: "application/x-www-form-urlencoded",
+    queryParams: function (params) {
+        return {
+            "offset": params.offset,
+            "limit": params.limit,
+            "search": params.search
+        }
+    },
+    striped: true,
+    search: true,
+    showHeader: true,
+    showRefresh: true,
+    pagination: true,
+    sidePagination: 'server',
+    pageNumber: 1,
+    pageSize: npsPageSize.get(),
+    pageList: npsPageSize.list,
+    onPageChange: function (number, size) { npsPageSize.save(size); },
+    columns: [
+        {field: 'Id', title: 'ID', sortable: true},
+        {field: 'UserName', title: '用户名'},
+        {field: 'Remark', title: '备注'},
+        {field: 'ClientCount', title: '客户端数'},
+        {field: 'MaxClientNum', title: '客户端配额'},
+        {field: 'MaxTunnelNum', title: '隧道配额'},
+        {field: 'ExpireTime', title: '到期', formatter: function (v) { return v || '不限'; }},
+        {field: 'ApiKeyEnabled', title: 'API Key', formatter: function (v) { return v ? '已签发' : '-'; }},
+        {field: 'Status', title: '状态', class: 'user-list__status', formatter: function (v, row) {
+            if (v) {
+                return '<div class="user-actions"><button type="button" class="btn btn-outline btn-success" onclick="changeStatus(' + row.Id + ',false)" data-title-zh="点击停用" data-title-en="Click to disable" data-aria-label-zh="停用用户" data-aria-label-en="Disable user"><i class="fa fa-check" aria-hidden="true"></i></button></div>';
+            }
+            return '<div class="user-actions"><button type="button" class="btn btn-outline btn-warning" onclick="changeStatus(' + row.Id + ',true)" data-title-zh="点击启用" data-title-en="Click to enable" data-aria-label-zh="启用用户" data-aria-label-en="Enable user"><i class="fa fa-pause" aria-hidden="true"></i></button></div>';
+        }},
+        {field: 'CreateTime', title: '创建时间'},
+        {field: 'option', title: '操作', class: 'user-list__actions', formatter: function (v, row) {
+            return '<div class="user-actions">'
+                + '<a href="{{.web_base_url}}/user/edit?id=' + row.Id + '" class="btn btn-outline btn-success" data-title-zh="编辑用户" data-title-en="Edit user" data-aria-label-zh="编辑用户" data-aria-label-en="Edit user"><i class="fa fa-edit" aria-hidden="true"></i></a>'
+                + '<button type="button" class="btn btn-outline btn-danger" onclick="del(' + row.Id + ')" data-title-zh="删除用户" data-title-en="Delete user" data-aria-label-zh="删除用户" data-aria-label-en="Delete user"><i class="fa fa-trash" aria-hidden="true"></i></button>'
+                + '</div>';
+        }}
+    ]
+});
+
+function changeStatus(id, status) {
+    $.ajax({
+        type: "POST",
+        url: "{{.web_base_url}}/user/changestatus",
+        data: {id: id, status: status},
+        success: function () { $('#table').npsTable('refresh'); },
+        error: function (res) { alert(res.responseText || 'failed'); }
+    });
+}
+
+function del(id) {
+    if (!confirm('删除用户会解除其客户端归属，确认？')) return;
+    $.ajax({
+        type: "POST",
+        url: "{{.web_base_url}}/user/del",
+        data: {id: id},
+        success: function () { $('#table').npsTable('refresh'); },
+        error: function (res) { alert(res.responseText || 'failed'); }
+    });
+}
+</script>

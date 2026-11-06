@@ -1,0 +1,327 @@
+<div class="wrapper wrapper-content">
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="ibox float-e-margins">
+                <div class="ibox-title">
+                    <h5 langtag="word-waf">WAF</h5>
+                </div>
+                <div class="ibox-content">
+                    <p class="help-block">{{.restart_hint}}</p>
+                    <p class="help-block text-warning">警告：开启「禁止国外」且无 IP 例外时，可能同时锁住境外对业务口与管理面板的访问；请先加办公网 IP。</p>
+
+                    <h4>① 总览（开关只读）</h4>
+                    <table class="table table-bordered">
+                        <tr><th>总开关 waf_enable</th><td>{{if .waf_enable}}开{{else}}关{{end}}</td></tr>
+                        <tr><th>防护管理面板</th><td>{{if .waf_protect_panel}}开（与业务共用规则）{{else}}关{{end}}</td></tr>
+                        <tr><th>UA 黑名单</th><td>{{if .waf_ua_blacklist_enable}}开{{else}}关{{end}}</td></tr>
+                        <tr><th>禁止国外</th><td>{{if .waf_block_foreign_enable}}开{{else}}关{{end}}</td></tr>
+                        <tr><th>自定义规则</th><td>{{if .waf_custom_rules_enable}}开{{else}}关{{end}}</td></tr>
+                        <tr><th>未知国家拒绝</th><td>{{if .waf_block_foreign_unknown}}开{{else}}关{{end}}</td></tr>
+                        <tr><th>国家头</th><td>{{.waf_country_headers}}</td></tr>
+                        <tr><th>规则文件</th><td><code>{{.waf_rules_path}}</code></td></tr>
+                        <tr><th>GeoIP</th><td>{{if .geo_loaded}}已加载{{else}}未加载{{end}} · 版本 {{if .geo_version}}{{.geo_version}}{{else}}未知{{end}} · <code>{{.geoip_path}}</code></td></tr>
+                    </table>
+                    <p><a class="btn btn-white btn-sm" href="{{.server_config_url}}">去服务端配置改开关（需重启）</a></p>
+
+                    <h4>② 一键防护</h4>
+                    <p class="help-block">点「应用推荐」写入内置关键词/路径；可关单条，内置路径规则不可删。</p>
+                    <div id="waf-presets" class="row"></div>
+
+                    <h4>③ UA 黑名单（关键词，默认「包含即拦」）</h4>
+                    <div class="form-inline m-b-sm">
+                        <input type="text" class="form-control" id="ua_value" placeholder="关键词，如 sqlmap" style="width:220px">
+                        <input type="text" class="form-control" id="ua_remark" placeholder="说明（可选）" style="width:180px">
+                        <button type="button" class="btn btn-success" onclick="addUAItem()">添加</button>
+                        <label class="m-l-md"><input type="checkbox" id="ua_is_regex"> 我懂正则，整表当正则</label>
+                    </div>
+                    <table class="table table-striped table-bordered">
+                        <thead><tr><th>关键词</th><th>说明</th><th>启用</th><th>操作</th></tr></thead>
+                        <tbody id="ua-tbody"></tbody>
+                    </table>
+
+                    <h4>④ 访问例外（IP / 网段）</h4>
+                    <p class="help-block">命中后不受 UA / 禁国外 / 自定义拒绝影响（仍受 ACL 约束）。</p>
+                    <div class="form-inline m-b-sm">
+                        <input type="text" class="form-control" id="ip_value" placeholder="如 10.0.0.0/8" style="width:220px">
+                        <input type="text" class="form-control" id="ip_remark" placeholder="说明，如 办公网" style="width:180px">
+                        <button type="button" class="btn btn-success" onclick="addIPItem()">添加</button>
+                    </div>
+                    <table class="table table-striped table-bordered">
+                        <thead><tr><th>IP / 网段</th><th>说明</th><th>启用</th><th>操作</th></tr></thead>
+                        <tbody id="ip-tbody"></tbody>
+                    </table>
+
+                    <h4>⑤ 路径拦截（前缀，仅域名 HTTP）</h4>
+                    <div class="form-inline m-b-sm">
+                        <input type="text" class="form-control" id="path_value" placeholder="路径前缀，如 /wp-login.php" style="width:260px">
+                        <input type="text" class="form-control" id="path_remark" placeholder="说明" style="width:180px">
+                        <button type="button" class="btn btn-success" onclick="addPathRule()">添加</button>
+                    </div>
+                    <table class="table table-striped table-bordered">
+                        <thead><tr><th>路径前缀</th><th>说明</th><th>启用</th><th>操作</th></tr></thead>
+                        <tbody id="path-tbody"></tbody>
+                    </table>
+
+                    <h4>⑥ 其它自定义规则</h4>
+                    <p class="help-block">非「路径前缀拒绝」的规则在此只读展示；复杂规则请用下方高级 JSON。</p>
+                    <table class="table table-bordered">
+                        <thead><tr><th>ID</th><th>动作</th><th>范围</th><th>说明</th><th>启用</th></tr></thead>
+                        <tbody id="other-tbody"></tbody>
+                    </table>
+
+                    <p class="m-t-md">
+                        <button class="btn btn-primary" type="button" onclick="saveWafForm()">保存并热加载</button>
+                    </p>
+                    <ul class="text-muted">
+                        <li class="text-danger">不懂正则请用关键词 / 路径前缀，不要勾选「整表当正则」。</li>
+                        <li>本页保存即热加载；改 conf 开关仍需重启。</li>
+                        <li>内置场景规则可改可关，路径类内置不可删除。</li>
+                        <li>「防护管理面板」默认开：扫描器 UA / 路径规则也会拦 web_port；关掉则仅护业务入口。</li>
+                    </ul>
+
+                    <div class="panel panel-default m-t-md">
+                        <div class="panel-heading">
+                            <a data-toggle="collapse" href="#waf-json-panel">⑦ 高级：原始 JSON（折叠）</a>
+                        </div>
+                        <div id="waf-json-panel" class="panel-collapse collapse">
+                            <div class="panel-body">
+                                <textarea class="form-control" id="waf_json" rows="18" style="font-family: Consolas, monospace;"></textarea>
+                                <button class="btn btn-white m-t-sm" type="button" onclick="saveWafRawJSON()">按 JSON 保存</button>
+                                <button class="btn btn-link m-t-sm" type="button" onclick="reloadFormFromJSON()">用 JSON 刷新上方表单</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    var cfg = {{.waf_cfg_json}};
+    var presets = {{.waf_presets_json}};
+    var pathPri = 110;
+
+    function ensureCfg() {
+        if (!cfg) cfg = {};
+        if (!cfg.ua_blacklist_items) cfg.ua_blacklist_items = [];
+        if (!cfg.ip_allowlist_items) cfg.ip_allowlist_items = [];
+        if (!cfg.rules) cfg.rules = [];
+        if (typeof cfg.ua_blacklist_is_regex !== 'boolean') cfg.ua_blacklist_is_regex = false;
+        if (!cfg.foreign_allow_codes || !cfg.foreign_allow_codes.length) cfg.foreign_allow_codes = ['CN'];
+    }
+
+    function isPathDenyRule(r) {
+        return r && r.action === 'deny' && (r.scope === 'http' || !r.scope) &&
+            r.when && r.when.path_prefix && r.when.path_prefix.length &&
+            !(r.when.path_regex && r.when.path_regex.length) &&
+            !(r.when.ip_in && r.when.ip_in.length) &&
+            !(r.when.ua_contains && r.when.ua_contains.length) &&
+            !(r.when.ua_regex && r.when.ua_regex.length);
+    }
+
+    function itemEnabled(it) {
+        return !it || it.enable === undefined || it.enable === null || !!it.enable;
+    }
+
+    function renderPresets() {
+        var $box = $('#waf-presets').empty();
+        (presets || []).forEach(function (p) {
+            var applied = false;
+            if (p.kind === 'path_wp') {
+                applied = (cfg.rules || []).some(function (r) { return r.id === p.id; });
+            } else if (p.kind === 'ua_scanner' || p.kind === 'ua_seo') {
+                applied = (cfg.ua_blacklist_items || []).some(function (it) {
+                    return (it.remark || '').indexOf(p.id) >= 0;
+                });
+            }
+            var html = '<div class="col-md-6 m-b-sm"><div class="panel panel-default">' +
+                '<div class="panel-body">' +
+                '<strong>' + $('<div>').text(p.title).html() + '</strong>' +
+                (applied ? ' <span class="label label-primary">已应用</span>' : '') +
+                '<p class="small text-muted m-t-xs">' + $('<div>').text(p.description).html() + '</p>';
+            if (p.kind === 'hint_foreign') {
+                html += '<a class="btn btn-white btn-sm" href="{{.server_config_url}}">去开禁国外开关</a>';
+            } else {
+                html += '<button type="button" class="btn btn-info btn-sm" onclick="applyPreset(\'' + p.id + '\')">应用推荐</button>';
+            }
+            html += '</div></div></div>';
+            $box.append(html);
+        });
+    }
+
+    function renderUA() {
+        $('#ua_is_regex').prop('checked', !!cfg.ua_blacklist_is_regex);
+        var $tb = $('#ua-tbody').empty();
+        (cfg.ua_blacklist_items || []).forEach(function (it, idx) {
+            $tb.append('<tr>' +
+                '<td><code>' + $('<div>').text(it.value || '').html() + '</code></td>' +
+                '<td>' + $('<div>').text(it.remark || '').html() + '</td>' +
+                '<td><input type="checkbox" ' + (itemEnabled(it) ? 'checked' : '') + ' onchange="toggleUA(' + idx + ', this.checked)"></td>' +
+                '<td><a href="javascript:;" onclick="delUA(' + idx + ')">删除</a></td></tr>');
+        });
+    }
+
+    function renderIP() {
+        var $tb = $('#ip-tbody').empty();
+        (cfg.ip_allowlist_items || []).forEach(function (it, idx) {
+            $tb.append('<tr>' +
+                '<td><code>' + $('<div>').text(it.value || '').html() + '</code></td>' +
+                '<td>' + $('<div>').text(it.remark || '').html() + '</td>' +
+                '<td><input type="checkbox" ' + (itemEnabled(it) ? 'checked' : '') + ' onchange="toggleIP(' + idx + ', this.checked)"></td>' +
+                '<td><a href="javascript:;" onclick="delIP(' + idx + ')">删除</a></td></tr>');
+        });
+    }
+
+    function renderPaths() {
+        var $tb = $('#path-tbody').empty();
+        var $ot = $('#other-tbody').empty();
+        (cfg.rules || []).forEach(function (r, idx) {
+            if (isPathDenyRule(r)) {
+                var prefixes = (r.when.path_prefix || []).join(', ');
+                var ops = r.builtin
+                    ? '<span class="text-muted">内置不可删</span>'
+                    : '<a href="javascript:;" onclick="delRule(' + idx + ')">删除</a>';
+                $tb.append('<tr>' +
+                    '<td><code>' + $('<div>').text(prefixes).html() + '</code></td>' +
+                    '<td>' + $('<div>').text(r.remark || r.id || '').html() + '</td>' +
+                    '<td><input type="checkbox" ' + (r.enable ? 'checked' : '') + ' onchange="toggleRule(' + idx + ', this.checked)"></td>' +
+                    '<td>' + ops + '</td></tr>');
+            } else {
+                $ot.append('<tr>' +
+                    '<td><code>' + $('<div>').text(r.id || '').html() + '</code></td>' +
+                    '<td>' + $('<div>').text(r.action || '').html() + '</td>' +
+                    '<td>' + $('<div>').text(r.scope || 'all').html() + '</td>' +
+                    '<td>' + $('<div>').text(r.remark || '').html() + '</td>' +
+                    '<td><input type="checkbox" ' + (r.enable ? 'checked' : '') + ' onchange="toggleRule(' + idx + ', this.checked)"></td></tr>');
+            }
+        });
+    }
+
+    function syncJSONBox() {
+        $('#waf_json').val(JSON.stringify(cfg, null, 2));
+    }
+
+    function renderAll() {
+        ensureCfg();
+        renderPresets();
+        renderUA();
+        renderIP();
+        renderPaths();
+        syncJSONBox();
+    }
+
+    window.addUAItem = function () {
+        var v = $.trim($('#ua_value').val());
+        if (!v) { showMsg('请填写关键词', 'error', 3000); return; }
+        cfg.ua_blacklist_items.push({ value: v, remark: $.trim($('#ua_remark').val()), enable: true });
+        $('#ua_value,#ua_remark').val('');
+        renderUA(); syncJSONBox();
+    };
+    window.toggleUA = function (i, on) { cfg.ua_blacklist_items[i].enable = on; syncJSONBox(); };
+    window.delUA = function (i) { cfg.ua_blacklist_items.splice(i, 1); renderUA(); syncJSONBox(); };
+
+    window.addIPItem = function () {
+        var v = $.trim($('#ip_value').val());
+        if (!v) { showMsg('请填写 IP 或网段', 'error', 3000); return; }
+        cfg.ip_allowlist_items.push({ value: v, remark: $.trim($('#ip_remark').val()), enable: true });
+        $('#ip_value,#ip_remark').val('');
+        renderIP(); syncJSONBox();
+    };
+    window.toggleIP = function (i, on) { cfg.ip_allowlist_items[i].enable = on; syncJSONBox(); };
+    window.delIP = function (i) { cfg.ip_allowlist_items.splice(i, 1); renderIP(); syncJSONBox(); };
+
+    window.addPathRule = function () {
+        var v = $.trim($('#path_value').val());
+        if (!v) { showMsg('请填写路径前缀', 'error', 3000); return; }
+        if (v.charAt(0) !== '/') v = '/' + v;
+        pathPri += 10;
+        cfg.rules.push({
+            id: 'path_' + Date.now(),
+            enable: true,
+            action: 'deny',
+            priority: pathPri,
+            scope: 'http',
+            remark: $.trim($('#path_remark').val()) || v,
+            builtin: false,
+            when: { path_prefix: [v], methods: ['GET', 'POST', 'HEAD'] }
+        });
+        $('#path_value,#path_remark').val('');
+        renderPaths(); syncJSONBox();
+    };
+    window.toggleRule = function (i, on) { cfg.rules[i].enable = on; syncJSONBox(); };
+    window.delRule = function (i) {
+        if (cfg.rules[i] && cfg.rules[i].builtin) {
+            showMsg('内置规则不可删除，可关闭启用', 'error', 4000);
+            return;
+        }
+        cfg.rules.splice(i, 1);
+        renderPaths(); syncJSONBox();
+    };
+
+    function buildPayload() {
+        cfg.ua_blacklist_is_regex = $('#ua_is_regex').is(':checked');
+        // 扁平列表交给后端 Normalize；仍写出以便兼容
+        cfg.ua_blacklist = (cfg.ua_blacklist_items || []).filter(itemEnabled).map(function (it) { return it.value; });
+        cfg.ip_allowlist = (cfg.ip_allowlist_items || []).filter(itemEnabled).map(function (it) { return it.value; });
+        return JSON.stringify(cfg);
+    }
+
+    window.saveWafForm = function () {
+        postSave(buildPayload());
+    };
+    window.saveWafRawJSON = function () {
+        postSave($('#waf_json').val());
+    };
+    window.reloadFormFromJSON = function () {
+        try {
+            cfg = JSON.parse($('#waf_json').val());
+            renderAll();
+            showMsg('已从 JSON 刷新表单（未保存）', 'success', 2000);
+        } catch (e) {
+            showMsg('JSON 无效: ' + e.message, 'error', 6000);
+        }
+    };
+
+    function postSave(body) {
+        $.ajax({
+            type: 'POST',
+            url: '{{.web_base_url}}/waf/save',
+            data: { waf_json: body },
+            success: function (res) {
+                if (res && res.status) {
+                    showMsg(res.msg || 'ok', 'success', 1500);
+                    try { cfg = JSON.parse(body); renderAll(); } catch (e) {}
+                } else {
+                    showMsg((res && res.msg) || 'error', 'error', 8000);
+                }
+            },
+            error: function (xhr, textStatus) {
+                showMsg(xhr.statusText || textStatus || 'error', 'error', 8000);
+            }
+        });
+    }
+
+    window.applyPreset = function (id) {
+        $.ajax({
+            type: 'POST',
+            url: '{{.web_base_url}}/waf/applypreset',
+            data: { preset_id: id },
+            success: function (res) {
+                if (res && res.status) {
+                    showMsg(res.msg || 'ok', 'success', 1500);
+                    if (res.data) { cfg = res.data; renderAll(); }
+                    else { location.reload(); }
+                } else {
+                    showMsg((res && res.msg) || 'error', 'error', 8000);
+                }
+            },
+            error: function (xhr, textStatus) {
+                showMsg(xhr.statusText || textStatus || 'error', 'error', 8000);
+            }
+        });
+    };
+
+    $(function () { renderAll(); });
+})();
+</script>

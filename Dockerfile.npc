@@ -1,0 +1,12 @@
+FROM golang:1.26 AS builder
+ARG GOPROXY=https://proxy.golang.org,direct
+ENV GOPROXY=${GOPROXY}
+WORKDIR /go/src/ehang.io/nps
+COPY . .
+RUN go mod download
+RUN CGO_ENABLED=0 go build -ldflags="-w -s -extldflags -static" -o npc ./cmd/npc
+
+FROM scratch
+COPY --from=builder /go/src/ehang.io/nps/npc /
+VOLUME /conf
+ENTRYPOINT ["/npc"]

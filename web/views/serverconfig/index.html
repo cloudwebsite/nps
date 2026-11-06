@@ -1,0 +1,772 @@
+<style>
+    /* padding-top 由脚本按悬浮条高度写入，避免 slot 再占一块等高空白 */
+    .server-config-page .server-hero {
+        position: fixed;
+        /* 避开固定顶栏；left/width 由脚本对齐内容区，避免悬浮条变窄 */
+        top: 62px;
+        z-index: 1020;
+        box-sizing: border-box;
+        background: linear-gradient(135deg, #1ab394 0%, #18a689 55%, #12876f 100%);
+        border-radius: 8px;
+        color: #fff;
+        padding: 10px 16px;
+        box-shadow: 0 8px 24px rgba(18, 135, 111, .28);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px 16px;
+        flex-wrap: nowrap;
+    }
+    .server-config-page .server-hero .hero-text {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+    .server-config-page .server-hero h2 {
+        margin: 0;
+        font-size: 17px;
+        font-weight: 600;
+        color: #fff;
+        white-space: nowrap;
+    }
+    .server-config-page .server-hero p {
+        margin: 0;
+        opacity: .88;
+        font-size: 12px;
+        line-height: 1.4;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .server-config-page .server-hero .hero-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 0 0 auto;
+        flex-wrap: nowrap;
+    }
+    .server-config-page .server-hero .btn-ghost {
+        background: rgba(255,255,255,.16);
+        border: 1px solid rgba(255,255,255,.45);
+        color: #fff;
+        font-size: 13px;
+        padding: 6px 14px;
+        white-space: nowrap;
+    }
+    .server-config-page .server-hero .btn-ghost:hover,
+    .server-config-page .server-hero .btn-ghost:focus {
+        background: rgba(255,255,255,.28);
+        color: #fff;
+    }
+    .server-config-page .server-hero .btn-save {
+        background: #fff;
+        border-color: #fff;
+        color: #12876f;
+        font-weight: 600;
+        font-size: 13px;
+        padding: 6px 18px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, .12);
+        white-space: nowrap;
+    }
+    .server-config-page .server-hero .btn-save:hover,
+    .server-config-page .server-hero .btn-save:focus {
+        background: #f1fbf7;
+        border-color: #f1fbf7;
+        color: #0f7460;
+    }
+    .server-config-page .server-hero .btn-save:disabled {
+        opacity: .7;
+        cursor: wait;
+    }
+    .server-config-page .jump-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 0 0 16px;
+    }
+    .server-config-page .jump-nav a {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: var(--nps-primary-soft, #f1fbf7);
+        border: 1px solid var(--nps-line, #d7efe7);
+        color: var(--nps-primary, #12876f);
+        font-size: 12px;
+        text-decoration: none;
+    }
+    .server-config-page .jump-nav a:hover {
+        background: var(--nps-surface-hover, #e4f7f1);
+        color: var(--nps-primary-hover, #0f7460);
+    }
+    
+    /* 瀑布流：整页一张流，高度不等时中间不留大空白 */
+    .server-config-page .cards-masonry {
+        column-count: 2;
+        column-gap: 16px;
+    }
+    /* form 用 contents，子卡片参与同一列流 */
+    .server-config-page .cards-masonry > .cards-masonry-form {
+        display: contents;
+    }
+    .server-config-page .cards-masonry > .setting-card,
+    .server-config-page .cards-masonry > .cards-masonry-form > .setting-card {
+        display: inline-block;
+        width: 100%;
+        break-inside: avoid;
+        -webkit-column-break-inside: avoid;
+        page-break-inside: avoid;
+        margin: 0 0 16px;
+        vertical-align: top;
+        /* overflow:hidden 会破坏多列断卡，圆角交给子元素裁切 */
+        overflow: visible;
+    }
+    .server-config-page .cards-masonry > .card-span-2,
+    .server-config-page .cards-masonry > .cards-masonry-form > .card-span-2 {
+        width: 100%;
+        column-span: all;
+    }
+    @media (max-width: 991px) {
+        .server-config-page .cards-masonry {
+            column-count: 1;
+        }
+    }
+
+    .server-config-page .setting-card {
+        background: var(--nps-surface, #fff);
+        border: 1px solid var(--nps-line, #e7eaec);
+        border-radius: 6px;
+        margin-bottom: 20px;
+        box-shadow: var(--nps-shadow-sm, 0 1px 3px rgba(0, 0, 0, .04));
+        overflow: hidden;
+        color: var(--nps-ink, #2f4050);
+    }
+    .server-config-page .setting-card-head {
+        padding: 14px 20px;
+        border-bottom: 1px solid var(--nps-line, #f0f2f5);
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--nps-ink, #2f4050);
+        background: var(--nps-surface-subtle, #fbfcfd);
+    }
+    .server-config-page .setting-card-head i {
+        color: var(--nps-primary, #1ab394);
+        margin-right: 8px;
+        width: 18px;
+        text-align: center;
+    }
+    .server-config-page .setting-card-body {
+        padding: 8px 20px 18px;
+    }
+    .server-config-page .setting-field {
+        padding: 14px 0;
+        border-bottom: 1px dashed var(--nps-line, #eef1f4);
+    }
+    .server-config-page .setting-field:last-child {
+        border-bottom: none;
+        padding-bottom: 4px;
+    }
+    .server-config-page .setting-field > label {
+        font-weight: 600;
+        color: var(--nps-ink, #2f4050);
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .server-config-page .setting-field > label code {
+        font-weight: 400;
+        color: var(--nps-muted, #98a6ad);
+        background: var(--nps-surface-subtle, #f5f7fa);
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 11px;
+    }
+    .server-config-page .setting-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 14px 0;
+        border-bottom: 1px dashed var(--nps-line, #eef1f4);
+    }
+    .server-config-page .setting-row:last-child {
+        border-bottom: none;
+        padding-bottom: 4px;
+    }
+    .server-config-page .setting-main {
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+    .server-config-page .setting-title {
+        font-weight: 600;
+        color: var(--nps-ink, #2f4050);
+        margin-bottom: 4px;
+        line-height: 1.4;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .server-config-page .setting-title code {
+        font-weight: 400;
+        color: var(--nps-muted, #98a6ad);
+        background: var(--nps-surface-subtle, #f5f7fa);
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 11px;
+    }
+    .server-config-page .setting-desc {
+        color: var(--nps-muted, #98a6ad);
+        font-size: 12px;
+        line-height: 1.55;
+    }
+    .server-config-page .setting-control {
+        flex: 0 0 auto;
+        padding-top: 2px;
+    }
+    @media (max-width: 767px) {
+        .server-config-page .setting-row {
+            flex-direction: column;
+            gap: 10px;
+        }
+    }
+    .server-config-page .setting-field .help-block {
+        margin-top: 6px;
+        margin-bottom: 0;
+        color: var(--nps-muted, #98a6ad);
+        font-size: 12px;
+        line-height: 1.55;
+    }
+    .server-config-page .setting-field .form-control {
+        max-width: 100%;
+    }
+    .server-config-page .meta-table {
+        width: 100%;
+        margin: 0;
+    }
+    .server-config-page .meta-table th {
+        width: 38%;
+        color: var(--nps-muted, #676a6c);
+        font-weight: 600;
+        vertical-align: top;
+        padding: 8px 0;
+        border-top: none;
+        border-bottom: 1px dashed var(--nps-line, #eef1f4);
+    }
+    .server-config-page .meta-table td {
+        padding: 8px 0;
+        border-top: none;
+        border-bottom: 1px dashed var(--nps-line, #eef1f4);
+        word-break: break-all;
+        color: var(--nps-ink, #2f4050);
+    }
+    .server-config-page .meta-table tr:last-child th,
+    .server-config-page .meta-table tr:last-child td {
+        border-bottom: none;
+    }
+    .server-config-page .conf-preview {
+        max-height: 280px;
+        overflow: auto;
+        background: var(--nps-surface-subtle, #f8fafb);
+        color: var(--nps-ink, #2f4050);
+        padding: 12px 14px;
+        border: 1px solid var(--nps-line, #e7eaec);
+        border-radius: 4px;
+        margin: 0;
+        font-size: 12px;
+        line-height: 1.45;
+    }
+    .server-config-page .optional-toggle {
+        margin: 0;
+        vertical-align: middle;
+    }
+    @media (max-width: 767px) {
+        .server-config-page .server-hero {
+            flex-wrap: wrap;
+            top: 56px;
+        }
+        .server-config-page .server-hero .hero-text {
+            flex: 1 1 100%;
+        }
+        .server-config-page .server-hero p {
+            white-space: normal;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+        }
+        .server-config-page .server-hero .hero-actions {
+            width: 100%;
+        }
+        .server-config-page .server-hero .btn-save,
+        .server-config-page .server-hero .btn-ghost {
+            flex: 1 1 auto;
+            text-align: center;
+        }
+    }
+</style>
+
+<div class="wrapper wrapper-content server-config-page">
+    <div class="server-hero" id="server-config-hero">
+        <div class="hero-text">
+            <h2>服务端配置</h2>
+            <p>{{.edit_hint}}</p>
+        </div>
+        <div class="hero-actions">
+            <a class="btn btn-ghost" href="{{.web_base_url}}/serverconfig/certificates">
+                <i class="fa fa-certificate"></i> 证书目录
+            </a>
+            <button type="button" class="btn btn-save" id="btn-save-conf">
+                <i class="fa fa-fw fa-check-circle"></i> 保存
+            </button>
+        </div>
+    </div>
+    {{if .conf_msg}}
+    <div class="alert alert-danger">{{.conf_msg}}</div>
+    {{end}}
+    <div class="jump-nav" id="conf-jump-nav">
+        <a href="#card-runtime">运行摘要</a>
+        <a href="#card-acme">ACME</a>
+        {{range .conf_sections}}
+        <a href="#card-{{.Anchor}}">{{.Name}}</a>
+        {{end}}
+        <a href="#card-cert-web">面板证书</a>
+        <a href="#card-cert-bridge">Bridge 证书</a>
+        <a href="#card-preview">文件预览</a>
+    </div>
+
+    <div class="cards-masonry">
+        <div class="setting-card" id="card-runtime">
+            <div class="setting-card-head"><i class="fa fa-heartbeat"></i>运行摘要</div>
+            <div class="setting-card-body">
+                <table class="meta-table">
+                    <tr><th>配置文件</th><td><code>{{.conf_path}}</code></td></tr>
+                    <tr><th>audit_log_path</th><td>{{if .audit_log_path}}{{.audit_log_path}}{{else}}（未配置=审计关）{{end}}</td></tr>
+                    <tr><th>审计写盘</th><td>{{if .audit_enabled}}已启用{{else}}关闭{{end}}</td></tr>
+                    <tr><th>audit_connection</th><td>{{.audit_connection}}</td></tr>
+                    <tr><th>bridge_secure_handshake</th><td>{{.bridge_secure_handshake}}</td></tr>
+                    <tr><th>bridge_require_tls</th><td>{{.bridge_require_tls}}</td></tr>
+                </table>
+            </div>
+        </div>
+
+        <div class="setting-card" id="card-acme">
+            <div class="setting-card-head"><i class="fa fa-lock"></i>ACME / 自动证书</div>
+            <div class="setting-card-body">
+                <table class="meta-table">
+                    <tr><th>摘要</th><td>{{.acme_status.Summary}}</td></tr>
+                    <tr><th>CA</th><td>{{.acme_status.CA}}</td></tr>
+                    <tr><th>缓存目录</th><td><code>{{.acme_status.CachePath}}</code></td></tr>
+                    <tr><th>端口条件</th><td>{{if .acme_status.PortReady}}满足（80/443 或 force_auto_ssl）{{else}}不满足{{end}}</td></tr>
+                    <tr><th>邮箱已配置</th><td>{{.acme_status.EmailSet}}</td></tr>
+                    <tr><th>ZeroSSL API Key</th><td>{{if .acme_status.ZeroSSLKeySet}}已配置{{else}}未配置{{end}}</td></tr>
+                    <tr><th>AutoSSL Host 数</th><td>{{.acme_status.AutoSSLHostCount}}</td></tr>
+                </table>
+                <p class="help-block" style="margin:10px 0 0;color:#98a6ad;font-size:12px;">{{.acme_status.Detail}}</p>
+            </div>
+        </div>
+
+        <form id="conf-form" class="cards-masonry-form">
+            {{range .conf_sections}}
+            <div class="setting-card" id="card-{{.Anchor}}">
+                <div class="setting-card-head"><i class="fa fa-sliders-h"></i>{{.Name}}</div>
+                <div class="setting-card-body">
+                    {{range .Fields}}
+                    {{$f := .}}
+                    {{if eq $f.Type "bool"}}
+                    <div class="setting-row">
+                        <div class="setting-main">
+                            <div class="setting-title">
+                                {{if $f.Optional}}
+                                <input class="optional-toggle" type="checkbox" name="config_enabled_{{$f.Key}}" value="1" {{if $f.Present}}checked{{end}} title="写入 conf">
+                                {{end}}
+                                <span>{{$f.Label}}</span>
+                                <code>{{$f.Key}}</code>
+                            </div>
+                            <div class="setting-desc">
+                                {{$f.Description}}
+                                {{if eq $f.FileStatus "exists"}} · 文件存在{{end}}
+                                {{if eq $f.FileStatus "missing"}} · <span class="text-danger">文件不存在</span>{{end}}
+                            </div>
+                        </div>
+                        <div class="setting-control">
+                            <input type="hidden" name="config_{{$f.Key}}" class="conf-bool-value"
+                                   value="{{if eq $f.Value "true"}}true{{else}}false{{end}}">
+                            <div class="onoffswitch">
+                                <input type="checkbox" class="onoffswitch-checkbox conf-bool-toggle"
+                                       id="conf_bool_{{$f.Key}}"
+                                       {{if eq $f.Value "true"}}checked{{end}}>
+                                <label class="onoffswitch-label" for="conf_bool_{{$f.Key}}">
+                                    <span class="onoffswitch-inner"></span>
+                                    <span class="onoffswitch-switch"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    {{else}}
+                    <div class="setting-field">
+                        <label>
+                            {{if $f.Optional}}
+                            <input class="optional-toggle" type="checkbox" name="config_enabled_{{$f.Key}}" value="1" {{if $f.Present}}checked{{end}}>
+                            {{end}}
+                            <span>{{$f.Label}}</span>
+                            <code>{{$f.Key}}</code>
+                        </label>
+                        {{if eq $f.Type "select"}}
+                        <select class="form-control" name="config_{{$f.Key}}">
+                            {{range $f.Options}}
+                            <option value="{{.}}" {{if eq $f.Value .}}selected{{end}}>{{.}}</option>
+                            {{end}}
+                        </select>
+                        {{else if eq $f.Type "int"}}
+                        <input class="form-control" name="config_{{$f.Key}}" type="number" min="0"
+                               value="{{$f.Value}}" placeholder="{{$f.Description}}" autocomplete="off">
+                        {{else if $f.Sensitive}}
+                        <input class="form-control" name="config_{{$f.Key}}" type="password" value=""
+                               placeholder="留空不修改" autocomplete="off">
+                        {{else}}
+                        <input class="form-control" name="config_{{$f.Key}}" type="text"
+                               value="{{$f.Value}}" placeholder="{{$f.Description}}" autocomplete="off">
+                        {{end}}
+                        <span class="help-block">
+                            {{$f.Description}}
+                            {{if eq $f.FileStatus "exists"}} · 文件存在{{end}}
+                            {{if eq $f.FileStatus "missing"}} · <span class="text-danger">文件不存在</span>{{end}}
+                        </span>
+                    </div>
+                    {{end}}
+                    {{end}}
+                </div>
+            </div>
+            {{end}}
+        </form>
+
+        <div class="setting-card" id="card-cert-web" data-scope="web"
+             data-check-url="{{.web_base_url}}/serverconfig/checkcertificate"
+             data-save-url="{{.web_base_url}}/serverconfig/savewebcertificate">
+            <div class="setting-card-head"><i class="fa fa-shield-alt"></i>面板证书托管</div>
+            <div class="setting-card-body">
+                <p class="help-block" style="margin-top:8px;color:#98a6ad;font-size:12px;">
+                    状态：{{.web_cert_status.Status}}
+                    {{if .web_cert_status.ExpiresAt}} · 到期 {{.web_cert_status.ExpiresAt}}{{end}}
+                    {{if .web_cert_status.CertFilePath}} · <code>{{.web_cert_status.CertFilePath}}</code>{{end}}
+                </p>
+                <div class="setting-field">
+                    <label>填写方式</label>
+                    <select class="form-control cert-mode">
+                        <option value="path">已有路径</option>
+                        <option value="upload">上传文件</option>
+                        <option value="paste">粘贴 PEM</option>
+                        <option value="clear">清除配置</option>
+                    </select>
+                </div>
+                <div class="cert-pane cert-pane-path">
+                    <div class="setting-field">
+                        <label>证书路径</label>
+                        <input class="form-control cert-path" value="{{.web_cert_status.CertFilePath}}" placeholder="conf/server.pem">
+                    </div>
+                    <div class="setting-field">
+                        <label>私钥路径</label>
+                        <input class="form-control key-path" value="{{.web_cert_status.KeyFilePath}}" placeholder="conf/server.key">
+                    </div>
+                </div>
+                <div class="cert-pane cert-pane-upload" style="display:none;">
+                    <div class="setting-field">
+                        <label>证书文件</label>
+                        <input class="form-control cert-upload" type="file" accept=".pem,.crt,.cer,.key">
+                    </div>
+                    <div class="setting-field">
+                        <label>私钥文件</label>
+                        <input class="form-control key-upload" type="file" accept=".pem,.key">
+                    </div>
+                </div>
+                <div class="cert-pane cert-pane-paste" style="display:none;">
+                    <div class="setting-field">
+                        <label>证书 PEM</label>
+                        <textarea class="form-control cert-paste" rows="4" placeholder="-----BEGIN CERTIFICATE-----"></textarea>
+                    </div>
+                    <div class="setting-field">
+                        <label>私钥 PEM</label>
+                        <textarea class="form-control key-paste" rows="4" placeholder="-----BEGIN PRIVATE KEY-----"></textarea>
+                    </div>
+                </div>
+                <div class="cert-result text-muted" style="margin:8px 0 12px;font-size:12px;white-space:pre-wrap;"></div>
+                <button type="button" class="btn btn-default btn-sm btn-cert-check">校验证书</button>
+                <button type="button" class="btn btn-primary btn-sm btn-cert-save">保存证书</button>
+            </div>
+        </div>
+
+        <div class="setting-card" id="card-cert-bridge" data-scope="bridge"
+             data-check-url="{{.web_base_url}}/serverconfig/checkcertificate"
+             data-save-url="{{.web_base_url}}/serverconfig/savebridgecertificate">
+            <div class="setting-card-head"><i class="fa fa-exchange-alt"></i>Bridge 证书托管</div>
+            <div class="setting-card-body">
+                <p class="help-block" style="margin-top:8px;color:#98a6ad;font-size:12px;">
+                    配置：{{.bridge_cert_status.Status}}
+                    {{if .bridge_cert_status.ExpiresAt}} · 到期 {{.bridge_cert_status.ExpiresAt}}{{end}}
+                    {{if .bridge_cert_status.CertFilePath}} · <code>{{.bridge_cert_status.CertFilePath}}</code>{{end}}
+                    <br>运行态：{{.bridge_cert_status.RuntimeStatus}}
+                    {{if .bridge_cert_status.Fingerprint}}
+                    <br>TLS 指纹（SHA-256）：<code class="nps-tls-fp" style="word-break:break-all;">{{.bridge_cert_status.Fingerprint}}</code>
+                    {{end}}
+                </p>
+                <div class="setting-field">
+                    <label>填写方式</label>
+                    <select class="form-control cert-mode">
+                        <option value="path">已有路径</option>
+                        <option value="upload">上传文件</option>
+                        <option value="paste">粘贴 PEM</option>
+                        <option value="clear">清除（回退临时自签名）</option>
+                    </select>
+                </div>
+                <div class="cert-pane cert-pane-path">
+                    <div class="setting-field">
+                        <label>证书路径</label>
+                        <input class="form-control cert-path" value="{{.bridge_cert_status.CertFilePath}}" placeholder="conf/bridgessl/bridge_server.pem">
+                    </div>
+                    <div class="setting-field">
+                        <label>私钥路径</label>
+                        <input class="form-control key-path" value="{{.bridge_cert_status.KeyFilePath}}" placeholder="conf/bridgessl/bridge_server.key">
+                    </div>
+                </div>
+                <div class="cert-pane cert-pane-upload" style="display:none;">
+                    <div class="setting-field">
+                        <label>证书文件</label>
+                        <input class="form-control cert-upload" type="file" accept=".pem,.crt,.cer,.key">
+                    </div>
+                    <div class="setting-field">
+                        <label>私钥文件</label>
+                        <input class="form-control key-upload" type="file" accept=".pem,.key">
+                    </div>
+                </div>
+                <div class="cert-pane cert-pane-paste" style="display:none;">
+                    <div class="setting-field">
+                        <label>证书 PEM</label>
+                        <textarea class="form-control cert-paste" rows="4" placeholder="-----BEGIN CERTIFICATE-----"></textarea>
+                    </div>
+                    <div class="setting-field">
+                        <label>私钥 PEM</label>
+                        <textarea class="form-control key-paste" rows="4" placeholder="-----BEGIN PRIVATE KEY-----"></textarea>
+                    </div>
+                </div>
+                <div class="cert-result text-muted" style="margin:8px 0 12px;font-size:12px;white-space:pre-wrap;"></div>
+                <button type="button" class="btn btn-default btn-sm btn-cert-check">校验证书</button>
+                <button type="button" class="btn btn-primary btn-sm btn-cert-save">保存证书</button>
+            </div>
+        </div>
+
+        <div class="setting-card card-span-2" id="card-preview">
+            <div class="setting-card-head"><i class="fa fa-file-code"></i>当前文件预览（敏感键已脱敏）</div>
+            <div class="setting-card-body">
+                <pre class="conf-preview">{{.conf_content}}</pre>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    function toast(msg, ok) {
+        if (window.showMsg) {
+            showMsg(msg, ok ? "success" : "error", ok ? 1800 : 5000);
+            return;
+        }
+        if (window.toastr) {
+            if (ok) toastr.success(msg); else toastr.error(msg);
+            return;
+        }
+        alert(msg);
+    }
+
+    function readFileAsBase64(file) {
+        return new Promise(function (resolve, reject) {
+            if (!file) {
+                resolve("");
+                return;
+            }
+            var reader = new FileReader();
+            reader.onload = function () {
+                var result = String(reader.result || "");
+                var idx = result.indexOf(",");
+                resolve(idx >= 0 ? result.slice(idx + 1) : result);
+            };
+            reader.onerror = function () { reject(new Error("读取文件失败")); };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function syncCertPanes($panel) {
+        var mode = $panel.find(".cert-mode").val();
+        $panel.find(".cert-pane").hide();
+        if (mode === "path") $panel.find(".cert-pane-path").show();
+        if (mode === "upload") $panel.find(".cert-pane-upload").show();
+        if (mode === "paste") $panel.find(".cert-pane-paste").show();
+        $panel.find(".btn-cert-check").prop("disabled", mode === "clear");
+    }
+
+    async function collectCertPayload($panel) {
+        var mode = $panel.find(".cert-mode").val();
+        var data = {mode: mode};
+        if (mode === "clear") return data;
+        if (mode === "path") {
+            data.cert = $.trim($panel.find(".cert-path").val());
+            data.key = $.trim($panel.find(".key-path").val());
+            return data;
+        }
+        if (mode === "paste") {
+            data.cert = $panel.find(".cert-paste").val();
+            data.key = $panel.find(".key-paste").val();
+            return data;
+        }
+        data.cert = await readFileAsBase64($panel.find(".cert-upload")[0].files[0]);
+        data.key = await readFileAsBase64($panel.find(".key-upload")[0].files[0]);
+        return data;
+    }
+
+    function bindCertPanel(selector) {
+        var $panel = $(selector);
+        $panel.find(".cert-mode").on("change", function () { syncCertPanes($panel); });
+        syncCertPanes($panel);
+
+        $panel.find(".btn-cert-check").on("click", async function () {
+            var $btn = $(this).prop("disabled", true);
+            var $result = $panel.find(".cert-result");
+            try {
+                var payload = await collectCertPayload($panel);
+                if (payload.mode === "clear") return;
+                $.ajax({
+                    type: "POST",
+                    url: $panel.data("check-url"),
+                    data: payload,
+                    dataType: "json"
+                }).done(function (res) {
+                    var ok = res && res.status === 1 && res.data && res.data.valid;
+                    var msg = (res && res.msg) || "校验完成";
+                    if (res && res.data) {
+                        if (res.data.subject) msg += "\nSubject: " + res.data.subject;
+                        if (res.data.expires_at) msg += "\n到期: " + res.data.expires_at;
+                        if (res.data.fingerprint) msg += "\n指纹: " + res.data.fingerprint.slice(0, 16) + "…";
+                    }
+                    $result.text(msg).toggleClass("text-danger", !ok).toggleClass("text-success", !!ok);
+                    toast(msg, !!ok);
+                }).fail(function (xhr) {
+                    var msg = "校验请求失败";
+                    try { msg = JSON.parse(xhr.responseText).msg || msg; } catch (e) {}
+                    $result.text(msg).removeClass("text-success").addClass("text-danger");
+                    toast(msg, false);
+                }).always(function () {
+                    $btn.prop("disabled", false);
+                });
+            } catch (e) {
+                toast(e.message || "读取证书失败", false);
+                $btn.prop("disabled", false);
+            }
+        });
+
+        $panel.find(".btn-cert-save").on("click", async function () {
+            var $btn = $(this).prop("disabled", true);
+            try {
+                var payload = await collectCertPayload($panel);
+                $.ajax({
+                    type: "POST",
+                    url: $panel.data("save-url"),
+                    data: payload,
+                    dataType: "json"
+                }).done(function (res) {
+                    if (!res || res.status !== 1) {
+                        toast((res && res.msg) || "保存失败", false);
+                        return;
+                    }
+                    toast(res.msg || "已保存", true);
+                    setTimeout(function () { location.reload(); }, 1000);
+                }).fail(function (xhr) {
+                    var msg = "保存请求失败";
+                    try { msg = JSON.parse(xhr.responseText).msg || msg; } catch (e) {}
+                    toast(msg, false);
+                }).always(function () {
+                    $btn.prop("disabled", false);
+                });
+            } catch (e) {
+                toast(e.message || "读取证书失败", false);
+                $btn.prop("disabled", false);
+            }
+        });
+    }
+
+    // bool 开关 → hidden true/false（serialize 只读 hidden）
+    $("#conf-form").on("change", ".conf-bool-toggle", function () {
+        var on = $(this).is(":checked");
+        $(this).closest(".setting-control").find(".conf-bool-value").val(on ? "true" : "false");
+    });
+
+    $("#btn-save-conf").on("click", function () {
+        var $btn = $(this).prop("disabled", true);
+        $("#conf-form .conf-bool-toggle").each(function () {
+            var on = $(this).is(":checked");
+            $(this).closest(".setting-control").find(".conf-bool-value").val(on ? "true" : "false");
+        });
+        $.ajax({
+            type: "POST",
+            url: "{{.web_base_url}}/serverconfig/save",
+            data: $("#conf-form").serialize(),
+            dataType: "json"
+        }).done(function (res) {
+            if (!res || res.status !== 1) {
+                toast((res && res.msg) || "保存失败", false);
+                return;
+            }
+            var msg = res.msg || "已保存";
+            if (res.restart_required) {
+                msg += "；变更: " + ((res.changed || []).join(", ") || "-");
+            }
+            toast(msg, true);
+            if (res.restart_required) {
+                setTimeout(function () { location.reload(); }, 1200);
+            }
+        }).fail(function (xhr) {
+            var msg = "请求失败";
+            try { msg = JSON.parse(xhr.responseText).msg || msg; } catch (e) {}
+            toast(msg, false);
+        }).always(function () {
+            $btn.prop("disabled", false);
+        });
+    });
+
+    var $page = $(".server-config-page");
+    var $hero = $("#server-config-hero");
+
+    function syncServerHeroFixed() {
+        if (!$page.length || !$hero.length) return;
+        var top = window.matchMedia("(max-width: 767px)").matches ? 56 : 62;
+        var rect = $page[0].getBoundingClientRect();
+        $hero.css({ top: top + "px", left: rect.left + "px", width: Math.max(0, rect.width) + "px" });
+        /* 用页面 padding 占位，不再给 slot 写 height，避免条下多一块等高空白 */
+        $page.css("padding-top", (($hero.outerHeight() || 0) + 16) + "px");
+    }
+
+    syncServerHeroFixed();
+    $(window).on("resize orientationchange", syncServerHeroFixed);
+    $(document).on("click", ".navbar-minimalize, .close-canvas-menu", function () {
+        setTimeout(syncServerHeroFixed, 200);
+    });
+    if (window.ResizeObserver) {
+        new ResizeObserver(syncServerHeroFixed).observe($page[0]);
+    }
+
+    $("#conf-jump-nav").on("click", "a[href^='#']", function (e) {
+        var id = $(this).attr("href");
+        var $t = $(id);
+        if (!$t.length) return;
+        e.preventDefault();
+        syncServerHeroFixed();
+        var topBar = window.matchMedia("(max-width: 767px)").matches ? 56 : 62;
+        var top = $t.offset().top - ($hero.outerHeight() || 0) - topBar - 12;
+        $("html, body").animate({ scrollTop: Math.max(0, top) }, 220);
+    });
+
+    bindCertPanel("#card-cert-web");
+    bindCertPanel("#card-cert-bridge");
+})();
+</script>
