@@ -1,0 +1,213 @@
+<div class="wrapper wrapper-content">
+    <div class="row">
+        <div class="col-sm-3">
+            <div class="ibox">
+                <div class="ibox-title"><h5>主机</h5>
+                    <button class="btn btn-xs btn-white pull-right" id="host_refresh" type="button">刷新</button>
+                </div>
+                <div class="ibox-content nps-host-picker" style="padding:0;">
+                    <div class="nps-host-picker__tools">
+                        <input type="search" id="host_filter" class="form-control" autocomplete="off" spellcheck="false" placeholder="搜索 ID / 备注…">
+                        <div class="nps-host-picker__filters">
+                            <button type="button" class="btn btn-xs btn-white active" data-host-scope="all">全部</button>
+                            <button type="button" class="btn btn-xs btn-white" data-host-scope="online">仅在线</button>
+                        </div>
+                    </div>
+                    <ul class="list-group nps-host-picker__list" id="host_list"></ul>
+                </div>
+            </div>
+            <div class="ibox">
+                <div class="ibox-title"><h5>快捷命令</h5>
+                    <button class="btn btn-xs btn-primary pull-right" id="cmd_add" type="button">+</button>
+                </div>
+                <div class="ibox-content" style="padding:8px;">
+                    <div id="cmd_list"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-9">
+            <div class="ibox">
+                <div class="ibox-title">
+                    <h5>终端 <span id="tp_client_name"></span></h5>
+                    <button class="btn btn-xs btn-danger pull-right" id="tp_close" type="button">关闭</button>
+                </div>
+                <div class="ibox-content" style="background:#1e1e1e;padding:8px;">
+                    <link rel="stylesheet" href="{{.web_base_url}}/static/terminal/xterm.min.css?v={{.version}}">
+                    <div id="term_box" style="height:480px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="{{.web_base_url}}/static/terminal/xterm.min.js?v={{.version}}"></script>
+<script src="{{.web_base_url}}/static/terminal/xterm-addon-fit.min.js?v={{.version}}"></script>
+<script>
+(function () {
+    var base = "{{.web_base_url}}";
+    var preset = {{.client_id}};
+    var term = null, fit = null, ws = null, currentId = 0;
+    var cmds = {customs: [], hidden: []};
+    var hosts = [];
+    var hostScope = "all";
+    var hostQuery = "";
+
+    function filteredHosts() {
+        var q = String(hostQuery || "").trim().toLowerCase();
+        return hosts.filter(function (c) {
+            if (hostScope === "online" && !c.is_connect) return false;
+            if (!q) return true;
+            var hay = String(c.id) + " " + (c.remark || "");
+            return hay.toLowerCase().indexOf(q) >= 0;
+        });
+    }
+
+    function renderHosts() {
+        var ul = $("#host_list").empty();
+        var list = filteredHosts();
+        if (!list.length) {
+            ul.append($("<li class='nps-host-picker__empty'></li>").text(hosts.length ? "无匹配主机" : "暂无可用主机"));
+            return;
+        }
+        list.forEach(function (c) {
+            var name = c.remark || ("client-" + c.id);
+            var li = $("<li class='list-group-item nps-host-picker__item'></li>");
+            if (c.id === currentId) li.addClass("is-active");
+            var meta = $("<div class='nps-host-picker__meta'></div>");
+            meta.append($("<strong></strong>").text("#" + c.id + " · " + name));
+            meta.append($("<span></span>").text(c.is_connect ? "在线" : "离线"));
+            var badge = c.is_connect
+                ? '<span class="nps-badge nps-badge-success">online</span>'
+                : '<span class="nps-badge nps-badge-muted">offline</span>';
+            li.append(meta).append($(badge));
+            li.on("click", function () { openTerm(c.id, name); });
+            ul.append(li);
+        });
+    }
+
+    function loadHosts() {
+        $.getJSON(base + "/terminal/getclients", function (res) {
+            hosts = (res.data || []).slice().sort(function (a, b) {
+                var ao = a.is_connect ? 1 : 0, bo = b.is_connect ? 1 : 0;
+                if (ao !== bo) return bo - ao;
+                return (a.id || 0) - (b.id || 0);
+            });
+            renderHosts();
+            if (preset > 0) {
+                var hit = null;
+                for (var i = 0; i < hosts.length; i++) {
+                    if (hosts[i].id === preset) { hit = hosts[i]; break; }
+                }
+                openTerm(preset, hit ? (hit.remark || ("client-" + preset)) : ("client-" + preset));
+                preset = 0;
+            }
+        });
+    }
+
+    function renderCmds() {
+        var box = $("#cmd_list").empty();
+        (cmds.customs || []).forEach(function (item, idx) {
+            var row = $("<div class='m-b-xs'></div>");
+            var btn = $("<button type='button' class='btn btn-xs btn-white btn-block text-left'></button>")
+                .text(item.label || item.cmd).data("cmd", item.cmd);
+            btn.on("click", function () {
+                if (!ws || ws.readyState !== 1 || !term) return;
+                ws.send(new TextEncoder().encode($(this).data("cmd") + "\n"));
+            });
+            var del = $("<button type='button' class='btn btn-xs btn-link text-danger'>删</button>").data("idx", idx);
+            del.on("click", function () {
+                cmds.customs.splice($(this).data("idx"), 1);
+                saveCmds();
+            });
+            row.append(btn).append(del);
+            box.append(row);
+        });
+    }
+
+    function loadCmds() {
+        $.getJSON(base + "/terminal/getcmds", function (res) {
+            cmds = res || {customs: [], hidden: []};
+            if (!cmds.customs) cmds.customs = [];
+            renderCmds();
+        });
+    }
+
+    function saveCmds() {
+        $.ajax({
+            type: "POST",
+            url: base + "/terminal/savecmds",
+            contentType: "application/json",
+            data: JSON.stringify(cmds),
+            success: function () { renderCmds(); }
+        });
+    }
+
+    function disposeTerm() {
+        if (ws) { try { ws.close(); } catch (e) {} ws = null; }
+        if (term) { try { term.dispose(); } catch (e) {} term = null; }
+    }
+
+    function closeTerm() {
+        disposeTerm();
+        currentId = 0;
+        $("#tp_client_name").text("");
+        renderHosts();
+    }
+
+    function openTerm(id, name) {
+        disposeTerm();
+        currentId = id;
+        $("#tp_client_name").text(" · #" + id + " " + name);
+        renderHosts();
+        term = new Terminal({ cursorBlink: true, fontSize: 14, theme: { background: "#1e1e1e" } });
+        fit = new FitAddon.FitAddon();
+        term.loadAddon(fit);
+        term.open(document.getElementById("term_box"));
+        fit.fit();
+        var proto = location.protocol === "https:" ? "wss://" : "ws://";
+        var url = proto + location.host + base + "/terminal/ws?client_id=" + id +
+            "&cols=" + term.cols + "&rows=" + term.rows;
+        ws = new WebSocket(url);
+        ws.binaryType = "arraybuffer";
+        ws.onmessage = function (ev) {
+            if (typeof ev.data === "string") {
+                term.writeln(ev.data);
+                return;
+            }
+            term.write(new Uint8Array(ev.data));
+        };
+        ws.onclose = function () { term && term.writeln("\r\n[disconnected]"); };
+        term.onData(function (data) {
+            if (ws && ws.readyState === 1) ws.send(new TextEncoder().encode(data));
+        });
+        term.onResize(function (size) {
+            if (ws && ws.readyState === 1) {
+                ws.send(JSON.stringify({ type: "resize", cols: size.cols, rows: size.rows }));
+            }
+        });
+        $(window).off("resize.term").on("resize.term", function () { fit && fit.fit(); });
+    }
+
+    $("#host_refresh").on("click", loadHosts);
+    $("#tp_close").on("click", closeTerm);
+    $("#host_filter").on("input", function () {
+        hostQuery = this.value;
+        renderHosts();
+    });
+    $(document).on("click", "[data-host-scope]", function () {
+        hostScope = $(this).attr("data-host-scope") || "all";
+        $("[data-host-scope]").removeClass("active");
+        $(this).addClass("active");
+        renderHosts();
+    });
+    $("#cmd_add").on("click", function () {
+        var label = prompt("命令名称");
+        if (!label) return;
+        var cmd = prompt("命令内容");
+        if (!cmd) return;
+        cmds.customs.push({label: label, cmd: cmd});
+        saveCmds();
+    });
+    loadHosts();
+    loadCmds();
+})();
+</script>

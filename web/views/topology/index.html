@@ -1,0 +1,95 @@
+<div class="wrapper wrapper-content">
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="ibox">
+                <div class="ibox-title">
+                    <h5 langtag="page-topology"></h5>
+                    <div class="ibox-tools">
+                        <button type="button" class="btn btn-xs btn-white" id="nps-topo-refresh" langtag="word-refresh"></button>
+                    </div>
+                </div>
+                <div class="ibox-content">
+                    <p class="text-muted" langtag="info-topology-hint"></p>
+                    <p class="text-muted small">updated: <span id="nps-topo-updated">-</span>
+                        · clients: <span id="nps-topo-client-count">0</span>
+                        · resources: <span id="nps-topo-resource-count">0</span>
+                    </p>
+                    <div id="nps-topo-grouped" class="nps-topo-grouped"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function ($) {
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function stateBadge(state) {
+    if (window.npsBadge) {
+      if (state === "running") return window.npsBadge(state, "success");
+      if (state === "offline" || state === "disabled") return window.npsBadge(state || "-", "muted");
+      return window.npsBadge(state || "-", "warning");
+    }
+    return esc(state);
+  }
+  function loadTopo() {
+    $.getJSON("{{.web_base_url}}/topology/data", function (data) {
+      $("#nps-topo-updated").text(data.updatedAt || "-");
+      var clients = data.clients || [];
+      var resources = data.resources || [];
+      $("#nps-topo-client-count").text(clients.length);
+      $("#nps-topo-resource-count").text(resources.length);
+
+      var byClient = {};
+      resources.forEach(function (r) {
+        var cid = r.clientId || 0;
+        if (!byClient[cid]) byClient[cid] = [];
+        byClient[cid].push(r);
+      });
+
+      var html = clients.map(function (c) {
+        var online = window.npsOnlineBadge ? window.npsOnlineBadge(c.online) : (c.online ? "online" : "offline");
+        var list = byClient[c.id] || [];
+        delete byClient[c.id];
+        var resHtml = list.map(function (r) {
+          return '<div class="nps-topo-res">'
+            + '<div class="nps-topo-edge" aria-hidden="true"></div>'
+            + '<div class="nps-topo-item nps-topo-item-res">'
+            + '<div><strong>' + esc(r.kind) + " #" + esc(r.id) + "</strong> "
+            + esc(r.mode) + " " + stateBadge(r.state) + "</div>"
+            + '<div class="text-muted small">' + esc(r.entry || "") + " → " + esc(r.target || "") + "</div>"
+            + (r.remark ? '<div class="text-muted small">' + esc(r.remark) + "</div>" : "")
+            + "</div></div>";
+        }).join("") || '<div class="nps-topo-res-empty text-muted small">无隧道/域名</div>';
+
+        return '<div class="nps-topo-group' + (c.online ? " is-online" : " is-offline") + '">'
+          + '<div class="nps-topo-item nps-topo-item-client">'
+          + '<div><strong>#' + esc(c.id) + '</strong> ' + esc(c.remark || "") + " " + online + "</div>"
+          + '<div class="text-muted small">' + esc(c.address || "-") + " · " + esc(c.version || "-")
+          + " · conn " + esc(c.connections) + "</div>"
+          + "</div>"
+          + '<div class="nps-topo-children">' + resHtml + "</div>"
+          + "</div>";
+      }).join("");
+
+      // 孤儿资源（客户端已被过滤）
+      Object.keys(byClient).forEach(function (cid) {
+        (byClient[cid] || []).forEach(function (r) {
+          html += '<div class="nps-topo-group is-orphan">'
+            + '<div class="nps-topo-item nps-topo-item-client"><strong>client #' + esc(cid) + "</strong> (未列出)</div>"
+            + '<div class="nps-topo-children"><div class="nps-topo-res">'
+            + '<div class="nps-topo-edge"></div>'
+            + '<div class="nps-topo-item nps-topo-item-res"><strong>' + esc(r.kind) + " #" + esc(r.id) + "</strong> "
+            + esc(r.mode) + " " + stateBadge(r.state) + "</div></div></div></div>";
+        });
+      });
+
+      $("#nps-topo-grouped").html(html || '<div class="text-muted">-</div>');
+    });
+  }
+  $("#nps-topo-refresh").on("click", loadTopo);
+  loadTopo();
+})(window.jQuery);
+</script>

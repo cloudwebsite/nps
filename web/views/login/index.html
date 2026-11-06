@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+        (function () {
+            try {
+                var saved = localStorage.getItem('nps_ui_theme') || localStorage.getItem('nps-theme');
+                var theme = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme', theme);
+            } catch (e) {
+                document.documentElement.setAttribute('data-theme', 'light');
+            }
+        })();
+    </script>
+    <title langtag="title-login">{{.app_name}}</title>
+    <link href="{{.web_base_url}}/static/css/bootstrap-5.3.3.min.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/fontawesome.min.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/solid.min.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/toastr.min.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/nps-modern.css?v={{.version}}&ui=20261105-1" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/nps-console.css?v={{.version}}&ui=20261105-1" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/bootstrap-nps.css?v={{.version}}&ui=20261105-1" rel="stylesheet">
+    <script src="{{.web_base_url}}/static/js/bootstrap-5.3.3.bundle.min.js?v={{.version}}"></script>
+    <script src="{{.web_base_url}}/static/js/jquery-3.4.1.min.js?v={{.version}}"></script>
+    <script src="{{.web_base_url}}/static/js/toastr.min.js?v={{.version}}"></script>
+    <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}&ui=20261106-3" type="text/javascript"></script>
+</head>
+
+<body class="gray-bg auth-body nps-bootstrap">
+<div class="auth-page">
+    <header class="auth-page__header">
+        <div class="auth-brand" aria-label="{{.app_name}}">
+            <span class="auth-brand__mark" aria-hidden="true"><i class="fa fa-project-diagram"></i></span>
+            <span class="auth-brand__name" langtag="application">{{.app_name}}</span>
+            {{if .web_welcome}}<span class="nps-env-badge">{{.web_welcome}}</span>{{end}}
+        </div>
+        <div class="auth-page__tools">
+            <button type="button" onclick="toggleLoginTheme()" class="auth-icon-button theme-toggle" id="theme-toggle" title="切换主题" aria-label="切换主题">
+                <i class="fa fa-moon" id="theme-icon" aria-hidden="true"></i>
+            </button>
+            <div class="auth-language btn-group dropdown">
+                <button id="languagemenu" class="btn btn-default dropdown-toggle auth-language__toggle" type="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="语言">
+                    <i class="fa fa-globe-asia" aria-hidden="true"></i><span></span>
+                </button>
+                <ul class="dropdown-menu"></ul>
+            </div>
+        </div>
+    </header>
+
+    <main class="auth-page__main">
+        <div class="auth-layout">
+            <aside class="auth-context" aria-labelledby="auth-context-title">
+                <h1 class="auth-context__title" id="auth-context-title" langtag="application"></h1>
+                <p class="auth-context__description" langtag="info-tagline"></p>
+                <ul class="auth-context__feature-list">
+                    <li class="auth-feature"><i class="fa fa-network-wired auth-feature__icon" aria-hidden="true"></i><span class="auth-feature__label" langtag="info-feature1"></span></li>
+                    <li class="auth-feature"><i class="fa fa-desktop auth-feature__icon" aria-hidden="true"></i><span class="auth-feature__label" langtag="info-feature2"></span></li>
+                    <li class="auth-feature"><i class="fa fa-lock auth-feature__icon" aria-hidden="true"></i><span class="auth-feature__label" langtag="info-feature3"></span></li>
+                    <li class="auth-feature"><i class="fa fa-tachometer-alt auth-feature__icon" aria-hidden="true"></i><span class="auth-feature__label" langtag="info-feature4"></span></li>
+                    <li class="auth-feature"><i class="fa fa-compress auth-feature__icon" aria-hidden="true"></i><span class="auth-feature__label" langtag="info-feature5"></span></li>
+                    <li class="auth-feature"><i class="fa fa-users auth-feature__icon" aria-hidden="true"></i><span class="auth-feature__label" langtag="info-feature6"></span></li>
+                    <li class="auth-feature"><i class="fa fa-globe auth-feature__icon" aria-hidden="true"></i><span class="auth-feature__label" langtag="info-feature7"></span></li>
+                    <li class="auth-feature"><i class="fa fa-sliders-h auth-feature__icon" aria-hidden="true"></i><span class="auth-feature__label" langtag="info-feature8"></span></li>
+                </ul>
+            </aside>
+
+            <section class="auth-panel login-form-wrap" aria-labelledby="auth-login-title">
+                <header class="auth-panel__header">
+                    <h2 class="auth-panel__title" id="auth-login-title" langtag="word-login"></h2>
+                </header>
+                <form class="form auth-form nps-form" onsubmit="return login()">
+                    <div class="form-group auth-field">
+                        <label class="auth-field__label" for="auth-username" langtag="word-username"></label>
+                        <div class="auth-control input-icon-wrap">
+                            <i class="fa fa-user input-icon" aria-hidden="true"></i>
+                            <input id="auth-username" name="username" class="form-control has-icon" placeholder="username" required autocomplete="username" langtag="word-username">
+                        </div>
+                    </div>
+                    <div class="form-group auth-field">
+                        <label class="auth-field__label" for="auth-password" langtag="word-password"></label>
+                        <div class="auth-control input-icon-wrap">
+                            <i class="fa fa-lock input-icon" aria-hidden="true"></i>
+                            <input id="auth-password" name="password" type="password" class="form-control has-icon" placeholder="password" required autocomplete="current-password" langtag="word-password">
+                        </div>
+                    </div>
+                    {{if .totp_enabled}}
+                    <div class="form-group auth-field">
+                        <label class="auth-field__label" for="auth-totp" data-i18n-zh="动态验证码" data-i18n-en="Authenticator code">动态验证码</label>
+                        <div class="auth-control input-icon-wrap">
+                            <i class="fa fa-shield-alt input-icon" aria-hidden="true"></i>
+                            <input id="auth-totp" name="totp" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" class="form-control has-icon" placeholder="000000" autocomplete="one-time-code" required>
+                        </div>
+                        <span class="help-block" data-i18n-zh="管理员已启用双因素认证时填写认证器应用当前的 6 位验证码。" data-i18n-en="Enter the current 6-digit code from your authenticator app when admin 2FA is enabled.">管理员已启用双因素认证时填写认证器应用当前的 6 位验证码。</span>
+                    </div>
+                    {{end}}
+                    {{if eq true .captcha_open}}
+                    <div class="form-group auth-field auth-field--captcha">
+                        <label class="auth-field__label" for="auth-captcha" langtag="word-captcha"></label>
+                        <div class="auth-captcha">
+                            <div class="auth-captcha__challenge">{{create_captcha}}</div>
+                            <div class="auth-control auth-captcha__input input-icon-wrap">
+                                <i class="fa fa-shield-alt input-icon" aria-hidden="true"></i>
+                                <input id="auth-captcha" name="captcha" class="form-control has-icon" placeholder="captcha" required autocomplete="off" langtag="word-captcha">
+                            </div>
+                        </div>
+                    </div>
+                    {{end}}
+                    <button type="submit" class="auth-submit login-btn" langtag="word-login"></button>
+                </form>
+                {{if eq true .register_allow}}
+                <div class="auth-switch register-link">
+                    <span class="auth-switch__copy" langtag="info-noaccount"></span>
+                    <a class="auth-switch__link" href="{{.web_base_url}}/login/register" langtag="word-register"></a>
+                </div>
+                {{end}}
+            </section>
+        </div>
+    </main>
+
+    <footer class="auth-page__footer">
+        <span><strong langtag="word-copyright"></strong> <span langtag="application"></span> &copy; 2018-2026</span>
+        <span class="auth-page__footer-links"><span langtag="word-readmore"></span> <a href="https://ehang.io/nps" langtag="word-go"></a></span>
+    </footer>
+</div>
+
+<script type="text/javascript">
+    window.nps = { "web_base_url": "{{.web_base_url}}", "version": "{{.version}}", "app_name": "{{.app_name}}" };
+
+    function toggleLoginTheme() {
+        var cur = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+        var next = cur === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        try { localStorage.setItem('nps_ui_theme', next); } catch (e) {}
+        var icon = document.getElementById('theme-icon');
+        if (icon) icon.className = next === 'dark' ? 'fa fa-sun' : 'fa fa-moon';
+    }
+
+    (function syncThemeIcon() {
+        var theme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+        var icon = document.getElementById('theme-icon');
+        if (icon) icon.className = theme === 'dark' ? 'fa fa-sun' : 'fa fa-moon';
+    })();
+
+    function login() {
+        $.ajax({
+            type: "POST",
+            url: "{{.web_base_url}}/login/verify",
+            data: $("form").serializeArray(),
+            success: function (res) {
+                if (res.status) {
+                    window.location.href = "{{.web_base_url}}/index/index";
+                } else {
+                    if (window.toastr) toastr.error(res.msg); else alert(res.msg);
+                    var captchaImg = document.querySelector('img.captcha-img');
+                    if (captchaImg) {
+                        var src = captchaImg.getAttribute('src').split('?')[0];
+                        captchaImg.setAttribute('src', src + '?reload=' + Date.now());
+                    }
+                    var captchaInput = document.querySelector('input[name="captcha"]');
+                    if (captchaInput) captchaInput.value = '';
+                }
+            }
+        });
+        return false;
+    }
+</script>
+</body>
+</html>

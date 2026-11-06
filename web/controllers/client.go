@@ -1,0 +1,339 @@
+package controllers
+
+import (
+	"strings"
+	"time"
+
+	"ehang.io/nps/lib/acl"
+	"ehang.io/nps/lib/common"
+	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/rate"
+	"ehang.io/nps/server"
+	"github.com/astaxie/beego"
+)
+
+type ClientController struct {
+	BaseController
+}
+
+func (s *ClientController) List() {
+	if s.Ctx.Request.Method == "GET" {
+		s.Data["menu"] = "client"
+		s.Data["allow_remote_update"] = file.EffectiveAllowRemoteUpdate()
+		s.SetInfo("client")
+		s.display("client/list")
+		return
+	}
+	start, length := s.GetAjaxParams()
+	clientIdSession := s.GetSession("clientId")
+	var clientId int
+	if clientIdSession == nil {
+		clientId = 0
+	} else {
+		clientId = clientIdSession.(int)
+	}
+	list, cnt := server.GetClientList(start, length, s.getEscapeString("search"), s.getEscapeString("sort"), s.getEscapeString("order"), clientId)
+	cmd := make(map[string]interface{})
+	ip := s.Ctx.Request.Host
+	cmd["ip"] = common.GetIpByAddr(ip)
+	cmd["bridgeType"] = beego.AppConfig.String("bridge_type")
+	cmd["bridgePort"] = server.Bridge.TunnelPort
+	s.AjaxTable(list, cnt, cnt, cmd)
+}
+
+// 添加客户端
+func (s *ClientController) Add() {
+	if s.Ctx.Request.Method == "GET" {
+		s.Data["menu"] = "client"
+		s.SetInfo("add client")
+		s.display()
+	} else {
+		remark := s.getEscapeString("remark")
+		webUserName := s.getEscapeString("web_username")
+		webPassword := s.getEscapeString("web_password")
+		if msg := validateClientWebPair(webUserName, webPassword); msg != "" {
+			s.AjaxErr(msg)
+			return
+		}
+		// 新建客户端 Web 密码存 bcrypt
+		if webPassword != "" {
+			if h, err := common.HashPassword(webPassword); err == nil {
+				webPassword = h
+			}
+		}
+		t := &file.Client{
+			VerifyKey: s.getEscapeString("vkey"),
+			Status:    true,
+			Remark:    remark,
+			Cnf: &file.Config{
+				U:        s.getEscapeString("u"),
+				P:        s.getEscapeString("p"),
+				Compress: common.GetBoolByStr(s.getEscapeString("compress")),
+				Crypt:    s.GetBoolNoErr("crypt"),
+			},
+			ConfigConnAllow: s.GetBoolNoErr("config_conn_allow"),
+			RateLimit:       s.GetIntNoErr("rate_limit"),
+			MaxConn:         s.GetIntNoErr("max_conn"),
+			WebUserName:     webUserName,
+			WebPassword:     webPassword,
+			MaxTunnelNum:    s.GetIntNoErr("max_tunnel"),
+			Flow: &file.Flow{
+				ExportFlow: 0,
+				InletFlow:  0,
+				FlowLimit:  int64(s.GetIntNoErr("flow_limit")),
+			},
+			BlackIpList:    normalizeACLRules(s.getEscapeString("blackiplist")),
+			IpWhite:        s.GetBoolNoErr("ipwhite"),
+			IpWhitePass:    s.getEscapeString("ipwhitepass"),
+			IpWhiteList:    normalizeACLRules(s.getEscapeString("ipwhitelist")),
+			IpListPriority: acl.NormalizePriority(s.GetIntNoErr("iplists_priority")),
+			ExpireTime:     normalizeExpireTime(s.getEscapeString("expire_time")),
+			CreateTime:     time.Now().Format("2006-01-02 15:04:05"),
+		}
+			if err := file.GetDb().NewClient(t); err != nil {
+				s.AjaxErr(err.Error())
+				return
+			}
+			s.auditPanel("client.create", "client", t.Id, t.UserId, "success", "", nil)
+			s.AjaxOkWithId("add success", t.Id)
+		}
+	}
+func (s *ClientController) GetClient() {
+	if s.Ctx.Request.Method == "POST" {
+		id := s.GetIntNoErr("id")
+		data := make(map[string]interface{})
+		if c, err := file.GetDb().GetClient(id); err != nil {
+			data["code"] = 0
+		} else {
+			data["code"] = 1
+			data["data"] = c
+		}
+		s.Data["json"] = data
+		s.ServeJSON()
+	}
+}
+
+// 修改客户端
+func (s *ClientController) Edit() {
+	id := s.GetIntNoErr("id")
+	if s.Ctx.Request.Method == "GET" {
+		s.Data["menu"] = "client"
+		if c, err := file.GetDb().GetClient(id); err != nil {
+			s.error()
+		} else {
+			s.Data["c"] = c
+			s.Data["BlackIpList"] = strings.Join(c.BlackIpList, "\r\n")
+			s.Data["IpWhiteList"] = strings.Join(c.IpWhiteList, "\r\n")
+		}
+		s.SetInfo("edit client")
+		s.display()
+	} else {
+		if c, err := file.GetDb().GetClient(id); err != nil {
+			s.error()
+			s.AjaxErr("client ID not found")
+			return
+		} else {
+			remark := s.getEscapeString("remark")
+			webUserName := s.getEscapeString("web_username")
+			webPassword := s.getEscapeString("web_password")
+			canChangeUserName := s.GetSession("isAdmin").(bool) || file.GetDb().GetGlobalSettings().AllowUserChangeUsername
+			if canChangeUserName {
+				if msg := validateClientWebPair(webUserName, webPassword); msg != "" {
+					s.AjaxErr(msg)
+					return
+				}
+			}
+			if webUserName != "" {
+				if webUserName == beego.AppConfig.String("web_username") || !file.GetDb().VerifyUserName(webUserName, c.Id) {
+					s.AjaxErr("web login username duplicate, please reset")
+					return
+				}
+			}
+			if s.GetSession("isAdmin").(bool) {
+				if !file.GetDb().VerifyVkey(s.getEscapeString("vkey"), c.Id) {
+					s.AjaxErr("Vkey duplicate, please reset")
+					return
+				}
+				c.VerifyKey = s.getEscapeString("vkey")
+				c.Flow.FlowLimit = int64(s.GetIntNoErr("flow_limit"))
+				c.RateLimit = s.GetIntNoErr("rate_limit")
+				c.MaxConn = s.GetIntNoErr("max_conn")
+				c.MaxTunnelNum = s.GetIntNoErr("max_tunnel")
+			}
+			if s.GetString("flow_inlet") != "" {
+				c.Flow.InletFlow = int64(s.GetIntNoErr("flow_inlet"))
+			}
+			if s.GetString("flow_export") != "" {
+				c.Flow.ExportFlow = int64(s.GetIntNoErr("flow_export"))
+			}
+			c.Remark = remark
+			c.Cnf.U = s.getEscapeString("u")
+			c.Cnf.P = s.getEscapeString("p")
+			c.Cnf.Compress = common.GetBoolByStr(s.getEscapeString("compress"))
+			c.Cnf.Crypt = s.GetBoolNoErr("crypt")
+			if canChangeUserName {
+				c.WebUserName = webUserName
+			}
+			// 仅当提交了新明文密码时才更新；已是 bcrypt 且表单回显原值则保持
+			if webPassword != "" {
+				if !common.IsBcryptHash(webPassword) {
+					if h, err := common.HashPassword(webPassword); err == nil {
+						c.WebPassword = h
+					} else {
+						c.WebPassword = webPassword
+					}
+				} else if webPassword != c.WebPassword {
+					c.WebPassword = webPassword
+				}
+			}
+			c.ConfigConnAllow = s.GetBoolNoErr("config_conn_allow")
+			c.IpWhite = s.GetBoolNoErr("ipwhite")
+			c.IpWhitePass = s.getEscapeString("ipwhitepass")
+			c.IpWhiteList = normalizeACLRules(s.getEscapeString("ipwhitelist"))
+			c.IpListPriority = acl.NormalizePriority(s.GetIntNoErr("iplists_priority"))
+			if c.Rate != nil {
+				c.Rate.Stop()
+			}
+			if c.RateLimit > 0 {
+				c.Rate = rate.NewRate(int64(c.RateLimit * 1024))
+				c.Rate.Start()
+			} else {
+				c.Rate = rate.NewRate((2 << 23) * 1024)
+				c.Rate.Start()
+			}
+
+				c.BlackIpList = normalizeACLRules(s.getEscapeString("blackiplist"))
+				c.ExpireTime = normalizeExpireTime(s.getEscapeString("expire_time"))
+				file.GetDb().JsonDb.StoreClientsToJsonFile()
+				s.auditPanel("client.update", "client", c.Id, c.UserId, "success", "", nil)
+			}
+			s.AjaxOk("save success")
+		}
+	}
+
+func RemoveRepeatedElement(arr []string) (newArr []string) {
+	newArr = make([]string, 0)
+	for i := 0; i < len(arr); i++ {
+		// 过滤空IP
+		if strings.TrimSpace(arr[i]) == "" {
+			continue
+		}
+		repeat := false
+		for j := i + 1; j < len(arr); j++ {
+			if arr[i] == arr[j] {
+				repeat = true
+				break
+			}
+		}
+		if !repeat {
+			newArr = append(newArr, arr[i])
+		}
+	}
+	return
+}
+
+// normalizeACLRules 保存时规范化 ACL（IP/CIDR/geoip:/geosite:）；非法项丢弃。
+func normalizeACLRules(raw string) []string {
+	out, _ := acl.NormalizeRules([]string{raw})
+	return out
+}
+
+// expireTimeFormats 支持的到期时间输入格式
+var expireTimeFormats = []string{
+	"2006-01-02 15:04:05",
+	"2006-01-02 15:04",
+	"2006-01-02T15:04:05",
+	"2006-01-02T15:04",
+	"2006-01-02",
+}
+
+// ParseExpireTime 将多种格式的到期时间字符串解析为 time.Time
+// 留空或无法解析返回 ok=false
+func ParseExpireTime(s string) (time.Time, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}, false
+	}
+	for _, f := range expireTimeFormats {
+		if t, err := time.ParseInLocation(f, s, time.Local); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
+// normalizeExpireTime 将用户提交的到期时间统一为 "2006-01-02 15:04:05"
+// 无法解析则返回空串表示不限制
+func normalizeExpireTime(s string) string {
+	if t, ok := ParseExpireTime(s); ok {
+		return t.Format("2006-01-02 15:04:05")
+	}
+	return ""
+}
+
+// 更改状态
+func (s *ClientController) ChangeStatus() {
+	id := s.GetIntNoErr("id")
+	client, err := file.GetDb().GetClient(id)
+	if err != nil {
+		s.AjaxErr("modified fail")
+		return
+	}
+	client.Status = s.GetBoolNoErr("status")
+	if client.Status == false {
+		server.DelClientConnect(client.Id)
+	}
+	file.GetDb().JsonDb.StoreClientsToJsonFile()
+	s.auditPanel("client.status", "client", client.Id, client.UserId, "success", "", nil)
+	s.AjaxOk("modified success")
+}
+
+// 删除客户端
+func (s *ClientController) Del() {
+	id := s.GetIntNoErr("id")
+	owner := 0
+	if c, err := file.GetDb().GetClient(id); err == nil && c != nil {
+		owner = c.UserId
+	}
+	if err := file.GetDb().DelClient(id); err != nil {
+		s.AjaxErr("delete error")
+		return
+	}
+	server.DelTunnelAndHostByClientId(id, false)
+	server.DelClientConnect(id)
+	s.auditPanel("client.delete", "client", id, owner, "success", "", nil)
+	s.AjaxOk("delete success")
+}
+
+// RemoteUpdate 向在线 npc 下发升级指令（需 allow_remote_update=true）。
+func (s *ClientController) RemoteUpdate() {
+	if isAdmin, ok := s.GetSession("isAdmin").(bool); !ok || !isAdmin {
+		s.AjaxErr("permission denied")
+		return
+	}
+	if !file.EffectiveAllowRemoteUpdate() {
+		s.AjaxErr("服务端已全局禁止远程升级（allow_remote_update=false）")
+		return
+	}
+	id := s.GetIntNoErr("id")
+	if id <= 0 {
+		s.AjaxErr("客户端编号无效")
+		return
+	}
+	client, err := file.GetDb().GetClient(id)
+	if err != nil || client == nil {
+		s.AjaxErr("客户端不存在")
+		return
+	}
+	if !client.Status || client.NoStore {
+		s.AjaxErr("客户端已停用或不支持远程升级")
+		return
+	}
+	if err = server.RequestClientUpdate(id); err != nil {
+		s.auditPanel("client.remote_update", "client", id, client.UserId, "failure", err.Error(), nil)
+		s.AjaxErr(err.Error())
+		return
+	}
+	s.auditPanel("client.remote_update", "client", id, client.UserId, "success", "", map[string]string{"version": client.Version})
+	s.AjaxOk("升级指令已下发；客户端下载并校验后将自动重启")
+}
