@@ -1,0 +1,616 @@
+package controllers
+
+import (
+	"ehang.io/nps/lib/crypt"
+	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/install"
+	"ehang.io/nps/lib/version"
+	"ehang.io/nps/server"
+	"ehang.io/nps/server/tool"
+
+	"github.com/astaxie/beego"
+)
+
+type IndexController struct {
+	BaseController
+}
+
+func (s *IndexController) Index() {
+	s.Data["web_base_url"] = beego.AppConfig.String("web_base_url")
+	s.Data["data"] = server.GetDashboardData()
+	s.SetInfo("dashboard")
+	s.display("index/index")
+}
+func (s *IndexController) Help() {
+	s.SetInfo("about")
+	s.display("index/help")
+}
+
+// CheckUpdate 检查是否有新版本，供 Web 首页异步展示
+func (s *IndexController) CheckUpdate() {
+	latest, hasUpdate, err := install.CheckLatestVersion()
+	if err != nil {
+		s.Data["json"] = map[string]interface{}{
+			"status": 0,
+			"msg":    "检查更新失败：" + err.Error(),
+		}
+	} else {
+		s.Data["json"] = map[string]interface{}{
+			"status":          1,
+			"has_update":      hasUpdate,
+			"current_version": version.VERSION,
+			"latest_version":  latest,
+		}
+	}
+	s.ServeJSON()
+	s.StopRun()
+}
+
+func (s *IndexController) Tcp() {
+	s.SetInfo("tcp")
+	s.SetType("tcp")
+	s.display("index/list")
+}
+
+func (s *IndexController) Udp() {
+	s.SetInfo("udp")
+	s.SetType("udp")
+	s.display("index/list")
+}
+
+func (s *IndexController) Socks5() {
+	s.SetInfo("socks5")
+	s.SetType("socks5")
+	s.display("index/list")
+}
+
+func (s *IndexController) Http() {
+	s.SetInfo("http proxy")
+	s.SetType("httpProxy")
+	s.display("index/list")
+}
+
+	func (s *IndexController) Mixproxy() {
+		s.SetInfo("mix proxy")
+		s.SetType("mixProxy")
+		s.display("index/list")
+	}
+
+func (s *IndexController) Shadowsocks() {
+	s.SetInfo("shadowsocks")
+	s.SetType("shadowsocks")
+	s.display("index/list")
+}
+
+// GenerateSspsk 一键生成 SS2022 PSK。
+func (s *IndexController) GenerateSspsk() {
+	psk := crypt.NewShadowsocksPSK()
+	s.Data["json"] = map[string]interface{}{
+		"status": 1,
+		"psk":    psk,
+		"method": "2022-blake3-aes-128-gcm",
+	}
+	s.ServeJSON()
+}
+
+func (s *IndexController) File() {
+	s.SetInfo("file server")
+	s.SetType("file")
+	s.display("index/list")
+}
+
+func (s *IndexController) Secret() {
+	s.SetInfo("secret")
+	s.SetType("secret")
+	s.display("index/list")
+}
+func (s *IndexController) P2p() {
+	s.SetInfo("p2p")
+	s.SetType("p2p")
+	s.display("index/list")
+}
+
+func (s *IndexController) Host() {
+	s.SetInfo("host")
+	s.SetType("hostServer")
+	s.display("index/list")
+}
+
+func (s *IndexController) All() {
+	s.Data["menu"] = "client"
+	clientId := s.getEscapeString("client_id")
+	s.Data["client_id"] = clientId
+	s.SetInfo("client id:" + clientId)
+	s.display("index/list")
+}
+
+func (s *IndexController) GetTunnel() {
+	start, length := s.GetAjaxParams()
+	taskType := s.getEscapeString("type")
+	clientId := s.GetIntNoErr("client_id")
+	list, cnt := server.GetTunnel(start, length, taskType, clientId, s.getEscapeString("search"), s.getEscapeString("sort"), s.getEscapeString("order"))
+	s.AjaxTable(list, cnt, cnt, nil)
+}
+
+func (s *IndexController) Add() {
+	if s.Ctx.Request.Method == "GET" {
+		s.Data["type"] = s.getEscapeString("type")
+		s.Data["client_id"] = s.getEscapeString("client_id")
+		s.SetInfo("add tunnel")
+		s.display()
+	} else {
+		httpProxy, socks5Proxy := mixProxyFlagsFromForm(s, s.getEscapeString("type"))
+		t := &file.Tunnel{
+			Port:         s.GetIntNoErr("port"),
+			ServerIp:     s.getEscapeString("server_ip"),
+			Mode:         s.getEscapeString("type"),
+			Target:       &file.Target{TargetStr: s.getEscapeString("target"), LocalProxy: s.GetBoolNoErr("local_proxy")},
+			Status:       true,
+			Remark:       s.getEscapeString("remark"),
+			Password:     s.getEscapeString("password"),
+			LocalPath:    s.getEscapeString("local_path"),
+			StripPre:     s.getEscapeString("strip_pre"),
+			ProtoVersion:          s.getEscapeString("proto_version"),
+			IdleAutoStopMinutes:   s.GetIntNoErr("idle_auto_stop_minutes"),
+			HttpProxy:             httpProxy,
+			Socks5Proxy:           socks5Proxy,
+			Flow:                  &file.Flow{},
+		}
+
+		if t.Mode == "shadowsocks" {
+			// 空密码自动生成；口令派生为合法 SS2022 PSK
+			t.Password = crypt.NormalizeShadowsocksPSK(t.Password)
+		}
+		if msg := validateTunnelInput(t.Mode, t.Target.TargetStr, t.Password, t.LocalPath); msg != "" {
+			s.AjaxErr(msg)
+			return
+		}
+		clientId := s.GetIntNoErr("client_id")
+		if clientId <= 0 {
+			s.AjaxErr("client is required")
+			return
+		}
+
+		if t.Port <= 0 {
+			t.Port = tool.GenerateServerPort(t.Mode)
+		}
+
+		if !tool.TestServerPort(t.Port, t.Mode) {
+			s.AjaxErr("The port cannot be opened because it may has been occupied or is no longer allowed.")
+			return
+		}
+		client, err := file.GetDb().GetClient(clientId)
+		if err != nil {
+			s.AjaxErr(err.Error())
+			return
+		}
+			t.Client = client
+			if client.MaxTunnelNum != 0 && client.GetTunnelNum() >= client.MaxTunnelNum {
+				s.AjaxErr("The number of tunnels exceeds the limit")
+				return
+			}
+			if err := file.GetDb().CheckCanAddTunnelOrHost(ownerUserIDOfClient(client)); err != nil {
+				s.AjaxErr(err.Error())
+				return
+			}
+				if err := file.GetDb().NewTask(t); err != nil {
+				s.AjaxErr(err.Error())
+				return
+			}
+			if err := server.AddTask(t); err != nil {
+				s.AjaxErr(err.Error())
+				return
+			}
+			s.auditPanel("tunnel.create", "tunnel", t.Id, ownerUserIDOfClient(t.Client), "success", "", nil)
+			s.AjaxOkWithId("add success", t.Id)
+		}
+	}
+
+func (s *IndexController) Copy() {
+	oldId := s.GetIntNoErr("id")
+	if oldTask, err := file.GetDb().GetTask(oldId); err != nil {
+		s.error()
+	} else {
+		if client, err := file.GetDb().GetClient(oldTask.Client.Id); err != nil {
+			s.AjaxErr("modified error,the client is not exist")
+			return
+		} else {
+			oldTask.Client = client
+		}
+
+		newTask := &file.Tunnel{
+			Client:       oldTask.Client,
+			Port:         tool.GenerateServerPort(oldTask.Mode),
+			ServerIp:     oldTask.ServerIp,
+			Mode:         oldTask.Mode,
+			Target:       oldTask.Target,
+			Status:       true,
+			Remark:       oldTask.Remark,
+			Password:     oldTask.Password,
+			LocalPath:    oldTask.LocalPath,
+			StripPre:     oldTask.StripPre,
+			ProtoVersion:          oldTask.ProtoVersion,
+			IdleAutoStopMinutes:   oldTask.IdleAutoStopMinutes,
+			HttpProxy:             oldTask.HttpProxy,
+			Socks5Proxy:           oldTask.Socks5Proxy,
+			Flow:                  &file.Flow{},
+		}
+		if !tool.TestServerPort(newTask.Port, newTask.Mode) {
+			s.AjaxErr("The port cannot be opened because it may has been occupied or is no longer allowed.")
+			return
+		}
+
+		if newTask.Client.MaxTunnelNum != 0 && newTask.Client.GetTunnelNum() >= newTask.Client.MaxTunnelNum {
+			s.AjaxErr("The number of tunnels exceeds the limit")
+			return
+		}
+		if err := file.GetDb().NewTask(newTask); err != nil {
+			s.AjaxErr(err.Error())
+			return
+		}
+		if err := server.AddTask(newTask); err != nil {
+			s.AjaxErr(err.Error())
+			return
+		}
+		s.AjaxOkWithId("add success", newTask.Id)
+	}
+}
+
+func (s *IndexController) GetOneTunnel() {
+	id := s.GetIntNoErr("id")
+	data := make(map[string]interface{})
+	if t, err := file.GetDb().GetTask(id); err != nil {
+		data["code"] = 0
+	} else {
+		data["code"] = 1
+		data["data"] = t
+	}
+	s.Data["json"] = data
+	s.ServeJSON()
+}
+func (s *IndexController) Edit() {
+	id := s.GetIntNoErr("id")
+	if s.Ctx.Request.Method == "GET" {
+		if t, err := file.GetDb().GetTask(id); err != nil {
+			s.error()
+		} else {
+			s.Data["t"] = t
+			httpOn, socksOn := t.HttpProxy, t.Socks5Proxy
+			if t.Mode == "mixProxy" && !httpOn && !socksOn {
+				httpOn, socksOn = true, true
+			}
+			s.Data["mix_http"] = httpOn
+			s.Data["mix_socks"] = socksOn
+		}
+		s.SetInfo("edit tunnel")
+		s.display()
+	} else {
+		if t, err := file.GetDb().GetTask(id); err != nil {
+			s.error()
+		} else {
+			mode := s.getEscapeString("type")
+			target := s.getEscapeString("target")
+			password := s.getEscapeString("password")
+			localPath := s.getEscapeString("local_path")
+			if mode == "shadowsocks" {
+				password = crypt.NormalizeShadowsocksPSK(password)
+			}
+			if msg := validateTunnelInput(mode, target, password, localPath); msg != "" {
+				s.AjaxErr(msg)
+				return
+			}
+			clientId := s.GetIntNoErr("client_id")
+			if clientId <= 0 {
+				s.AjaxErr("client is required")
+				return
+			}
+			if client, err := file.GetDb().GetClient(clientId); err != nil {
+				s.AjaxErr("modified error,the client is not exist")
+				return
+			} else {
+				t.Client = client
+			}
+			t.Mode = mode
+			if s.GetIntNoErr("port") != t.Port {
+				t.Port = s.GetIntNoErr("port")
+
+				if t.Port <= 0 {
+					t.Port = tool.GenerateServerPort(t.Mode)
+				}
+
+				if !tool.TestServerPort(t.Port, t.Mode) {
+					s.AjaxErr("The port cannot be opened because it may has been occupied or is no longer allowed.")
+					return
+				}
+			}
+			t.ServerIp = s.getEscapeString("server_ip")
+			t.Target = &file.Target{TargetStr: target}
+			t.Password = password
+			t.Id = id
+			t.LocalPath = localPath
+			t.ProtoVersion = s.getEscapeString("proto_version")
+			t.StripPre = s.getEscapeString("strip_pre")
+			t.Remark = s.getEscapeString("remark")
+			t.Target.LocalProxy = s.GetBoolNoErr("local_proxy")
+			t.IdleAutoStopMinutes = s.GetIntNoErr("idle_auto_stop_minutes")
+			t.HttpProxy, t.Socks5Proxy = mixProxyFlagsFromForm(s, mode)
+			if s.GetString("flow_inlet") != "" {
+				t.Flow.InletFlow = int64(s.GetIntNoErr("flow_inlet"))
+			}
+			if s.GetString("flow_export") != "" {
+				t.Flow.ExportFlow = int64(s.GetIntNoErr("flow_export"))
+			}
+			file.GetDb().UpdateTask(t)
+			server.StopServer(t.Id)
+			server.StartTask(t.Id)
+			s.auditPanel("tunnel.update", "tunnel", t.Id, ownerUserIDOfClient(t.Client), "success", "", nil)
+		}
+		s.AjaxOk("modified success")
+	}
+}
+
+func (s *IndexController) Stop() {
+	id := s.GetIntNoErr("id")
+	owner := 0
+	if t, err := file.GetDb().GetTask(id); err == nil {
+		owner = ownerUserIDOfClient(t.Client)
+	}
+	if err := server.StopServer(id); err != nil {
+		s.AjaxErr("stop error")
+		return
+	}
+	s.auditPanel("tunnel.stop", "tunnel", id, owner, "success", "", nil)
+	s.AjaxOk("stop success")
+}
+
+func (s *IndexController) Del() {
+	id := s.GetIntNoErr("id")
+	owner := 0
+	if t, err := file.GetDb().GetTask(id); err == nil {
+		owner = ownerUserIDOfClient(t.Client)
+	}
+	if err := server.DelTask(id); err != nil {
+		s.AjaxErr("delete error")
+		return
+	}
+	s.auditPanel("tunnel.delete", "tunnel", id, owner, "success", "", nil)
+	s.AjaxOk("delete success")
+}
+
+func (s *IndexController) Start() {
+	id := s.GetIntNoErr("id")
+	owner := 0
+	if t, err := file.GetDb().GetTask(id); err == nil {
+		owner = ownerUserIDOfClient(t.Client)
+	}
+	if err := server.StartTask(id); err != nil {
+		s.AjaxErr("start error")
+		return
+	}
+	s.auditPanel("tunnel.start", "tunnel", id, owner, "success", "", nil)
+	s.AjaxOk("start success")
+}
+
+func (s *IndexController) HostList() {
+	if s.Ctx.Request.Method == "GET" {
+		s.Data["client_id"] = s.getEscapeString("client_id")
+		s.Data["menu"] = "host"
+		s.SetInfo("host list")
+		s.display("index/hlist")
+	} else {
+		start, length := s.GetAjaxParams()
+		clientId := s.GetIntNoErr("client_id")
+		list, cnt := server.GetHostList(start, length, clientId, s.getEscapeString("search"), s.getEscapeString("sort"), s.getEscapeString("order"))
+		s.AjaxTable(list, cnt, cnt, nil)
+	}
+}
+
+func (s *IndexController) GetHost() {
+	if s.Ctx.Request.Method == "POST" {
+		data := make(map[string]interface{})
+		if h, err := file.GetDb().GetHostById(s.GetIntNoErr("id")); err != nil {
+			data["code"] = 0
+		} else {
+			data["data"] = h
+			data["code"] = 1
+		}
+		s.Data["json"] = data
+		s.ServeJSON()
+	}
+}
+
+func (s *IndexController) DelHost() {
+	id := s.GetIntNoErr("id")
+	owner := 0
+	if h, err := file.GetDb().GetHostById(id); err == nil {
+		owner = ownerUserIDOfClient(h.Client)
+	}
+	if err := file.GetDb().DelHost(id); err != nil {
+		s.AjaxErr("delete error")
+		return
+	}
+	s.auditPanel("host.delete", "host", id, owner, "success", "", nil)
+	s.AjaxOk("delete success")
+}
+
+func (s *IndexController) HostStop() {
+	id := s.GetIntNoErr("id")
+	if h, err := file.GetDb().GetHostById(id); err != nil {
+		s.AjaxErr("stop error")
+		return
+	} else {
+		h.IsClose = true
+		file.GetDb().JsonDb.StoreHostToJsonFile()
+		s.auditPanel("host.stop", "host", id, ownerUserIDOfClient(h.Client), "success", "", nil)
+	}
+	s.AjaxOk("stop success")
+}
+
+func (s *IndexController) HostStart() {
+	id := s.GetIntNoErr("id")
+	if h, err := file.GetDb().GetHostById(id); err != nil {
+		s.AjaxErr("start error")
+		return
+	} else {
+		h.IsClose = false
+		file.GetDb().JsonDb.StoreHostToJsonFile()
+		s.auditPanel("host.start", "host", id, ownerUserIDOfClient(h.Client), "success", "", nil)
+	}
+	s.AjaxOk("start success")
+}
+
+func (s *IndexController) AddHost() {
+	if s.Ctx.Request.Method == "GET" {
+		s.Data["client_id"] = s.getEscapeString("client_id")
+		s.Data["menu"] = "host"
+		s.SetInfo("add host")
+		s.display("index/hadd")
+	} else {
+		host := s.getEscapeString("host")
+		target := s.getEscapeString("target")
+		if msg := validateHostInput(host, target); msg != "" {
+			s.AjaxErr(msg)
+			return
+		}
+		clientId := s.GetIntNoErr("client_id")
+		if clientId <= 0 {
+			s.AjaxErr("client is required")
+			return
+		}
+			proxyProtocol, proxyErr := s.parseHostProxyProtocol(0)
+			if proxyErr != nil {
+				s.AjaxErr(proxyErr.Error())
+				return
+			}
+			h := &file.Host{
+				Host:                   host,
+				Target:                 &file.Target{TargetStr: target, LocalProxy: s.GetBoolNoErr("local_proxy"), ProxyProtocol: proxyProtocol},
+				HeaderChange:           s.getEscapeString("header"),
+				ResponseHeaderChange:   s.getEscapeString("resp_header"),
+				HostChange:             s.getEscapeString("hostchange"),
+				PathRewrite:            s.getEscapeString("path_rewrite"),
+				Cors:                   s.getEscapeString("cors"),
+				Remark:                 s.getEscapeString("remark"),
+				Location:               s.getEscapeString("location"),
+				Flow:                   &file.Flow{},
+				Scheme:                 s.getEscapeString("scheme"),
+				KeyFilePath:            s.getEscapeString("key_file_path"),
+				CertFilePath:           s.getEscapeString("cert_file_path"),
+				AutoHttps:              s.GetBoolNoErr("AutoHttps"),
+				AutoSSL:                s.GetBoolNoErr("AutoSSL") || s.GetBoolNoErr("auto_ssl"),
+				HttpsJustProxy:         s.GetBoolNoErr("https_just_proxy") || s.GetBoolNoErr("HttpsJustProxy"),
+			}
+
+		if h.Scheme == "http" {
+			h.AutoHttps = false
+			h.AutoSSL = false
+		}
+
+		client, err := file.GetDb().GetClient(clientId)
+		if err != nil {
+			s.AjaxErr("add error the client can not be found")
+			return
+		}
+		h.Client = client
+		if client.MaxTunnelNum != 0 && client.GetTunnelNum() >= client.MaxTunnelNum {
+			s.AjaxErr("The number of tunnels exceeds the limit")
+			return
+		}
+		if err := file.GetDb().CheckCanAddTunnelOrHost(ownerUserIDOfClient(client)); err != nil {
+			s.AjaxErr(err.Error())
+			return
+		}
+
+			if err := file.GetDb().NewHost(h); err != nil {
+				s.AjaxErr("add fail" + err.Error())
+				return
+			}
+			s.auditPanel("host.create", "host", h.Id, ownerUserIDOfClient(h.Client), "success", "", nil)
+			s.AjaxOkWithId("add success", h.Id)
+		}
+	}
+
+func (s *IndexController) EditHost() {
+	id := s.GetIntNoErr("id")
+	if s.Ctx.Request.Method == "GET" {
+		s.Data["menu"] = "host"
+		if h, err := file.GetDb().GetHostById(id); err != nil {
+			s.error()
+		} else {
+			s.Data["h"] = h
+		}
+		s.SetInfo("edit")
+		s.display("index/hedit")
+	} else {
+		if h, err := file.GetDb().GetHostById(id); err != nil {
+			s.error()
+		} else {
+			host := s.getEscapeString("host")
+			target := s.getEscapeString("target")
+			if msg := validateHostInput(host, target); msg != "" {
+				s.AjaxErr(msg)
+				return
+			}
+			clientId := s.GetIntNoErr("client_id")
+			if clientId <= 0 {
+				s.AjaxErr("client is required")
+				return
+			}
+			if h.Host != host {
+				tmpHost := new(file.Host)
+				tmpHost.Host = host
+				tmpHost.Location = s.getEscapeString("location")
+				tmpHost.Scheme = s.getEscapeString("scheme")
+				if file.GetDb().IsHostExist(tmpHost) {
+					s.AjaxErr("host has exist")
+					return
+				}
+			}
+			if client, err := file.GetDb().GetClient(clientId); err != nil {
+				s.AjaxErr("modified error,the client is not exist")
+				return
+			} else {
+				h.Client = client
+			}
+			h.Host = host
+			currentPP := 0
+			if h.Target != nil {
+				currentPP = h.Target.ProxyProtocol
+			}
+			proxyProtocol, proxyErr := s.parseHostProxyProtocol(currentPP)
+			if proxyErr != nil {
+				s.AjaxErr(proxyErr.Error())
+				return
+			}
+			h.Target = &file.Target{TargetStr: target, LocalProxy: s.GetBoolNoErr("local_proxy"), ProxyProtocol: proxyProtocol}
+			h.HeaderChange = s.getEscapeString("header")
+			h.ResponseHeaderChange = s.getEscapeString("resp_header")
+			h.HostChange = s.getEscapeString("hostchange")
+			h.PathRewrite = s.getEscapeString("path_rewrite")
+			h.Cors = s.getEscapeString("cors")
+			h.Remark = s.getEscapeString("remark")
+			h.Location = s.getEscapeString("location")
+			h.Scheme = s.getEscapeString("scheme")
+			h.KeyFilePath = s.getEscapeString("key_file_path")
+			h.CertFilePath = s.getEscapeString("cert_file_path")
+			h.AutoHttps = s.GetBoolNoErr("AutoHttps")
+			h.AutoSSL = s.GetBoolNoErr("AutoSSL") || s.GetBoolNoErr("auto_ssl")
+			h.HttpsJustProxy = s.GetBoolNoErr("https_just_proxy", s.GetBoolNoErr("HttpsJustProxy", h.HttpsJustProxy))
+
+			if h.Scheme == "http" {
+				h.AutoHttps = false
+				h.AutoSSL = false
+			}
+
+			if s.GetString("flow_inlet") != "" {
+				h.Flow.InletFlow = int64(s.GetIntNoErr("flow_inlet"))
+			}
+			if s.GetString("flow_export") != "" {
+				h.Flow.ExportFlow = int64(s.GetIntNoErr("flow_export"))
+			}
+				file.GetDb().JsonDb.StoreHostToJsonFile()
+				s.auditPanel("host.update", "host", h.Id, ownerUserIDOfClient(h.Client), "success", "", nil)
+			}
+			s.AjaxOk("modified success")
+		}
+	}

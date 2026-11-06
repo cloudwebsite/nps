@@ -1,0 +1,103 @@
+<div class="wrapper wrapper-content animated fadeInRight">
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="ibox float-e-margins">
+                <div class="ibox-title">
+                    <h5>审计日志</h5>
+                </div>
+                <div class="ibox-content">
+                    {{if not .audit_enabled}}
+                    <div class="alert alert-warning">
+                        审计未开启。在服务端配置页设置 <code>audit_log_path</code>（例如 <code>conf/audit.log</code>）后重启生效。
+                    </div>
+                    {{else}}
+                    <p class="text-muted">日志：{{.audit_path}}
+                        {{if .audit_connection}} · 连接审计：开{{else}} · 连接审计：关{{end}}
+                    </p>
+                    {{end}}
+                    <div id="toolbar" class="nps-toolbar-row">
+                        <select class="form-control" id="filter_actor" style="width:140px;">
+                            <option value="">全部类型</option>
+                            <option value="admin">admin</option>
+                            <option value="web">web</option>
+                            <option value="api">api</option>
+                            <option value="bridge">bridge（连接）</option>
+                        </select>
+                        <select class="form-control" id="filter_action" style="width:200px;">
+                            <option value="">全部动作</option>
+                            <option value="client.connect">client.connect</option>
+                            <option value="client.disconnect">client.disconnect</option>
+                            <option value="server_config.update">server_config.update</option>
+                            <option value="tunnel.create">tunnel.create</option>
+                            <option value="host.create">host.create</option>
+                            <option value="user.create">user.create</option>
+                        </select>
+                        <input class="form-control" id="filter_resource" placeholder="resource_type" style="width:140px;">
+                        <select class="form-control" id="filter_result" style="width:120px;">
+                            <option value="">全部结果</option>
+                            <option value="success">success</option>
+                            <option value="failure">failure</option>
+                        </select>
+                        <button class="btn btn-primary" type="button" onclick="$('#table').npsTable('refresh')"><i class="fa fa-sync-alt" aria-hidden="true"></i> <span langtag="word-refresh">刷新</span></button>
+                    </div>
+                    <table id="table"></table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+$('#table').npsTable({
+    toolbar: "#toolbar",
+    method: 'post',
+    url: "{{.web_base_url}}/auditpanel/list",
+    contentType: "application/x-www-form-urlencoded",
+    queryParams: function (params) {
+        return {
+            offset: params.offset,
+            limit: params.limit,
+            search: params.search,
+            action: $("#filter_action").val(),
+            actor_type: $("#filter_actor").val(),
+            resource_type: $("#filter_resource").val(),
+            result: $("#filter_result").val()
+        };
+    },
+    striped: true,
+    search: true,
+    showRefresh: true,
+    pagination: true,
+    sidePagination: 'server',
+    pageNumber: 1,
+    pageSize: npsPageSize.get(),
+    pageList: npsPageSize.list,
+    onPageChange: function (number, size) { npsPageSize.save(size); },
+    columns: [
+        {field: 'Time', title: '时间', sortable: false},
+        {field: 'ActorName', title: '操作者'},
+        {field: 'ActorType', title: '类型', formatter: function (v) {
+            return v === 'bridge' ? npsBadge(v, 'info') : npsBadge(v || '-', 'muted');
+        }},
+        {field: 'Action', title: '动作'},
+        {field: 'ResourceType', title: '资源'},
+        {field: 'ResourceID', title: '资源ID'},
+        {field: 'OwnerUserID', title: '归属用户'},
+        {field: 'SourceIP', title: '来源IP'},
+        {field: 'Transport', title: '传输', formatter: function (v, row) {
+            return v || (row.Details && row.Details.transport) || '';
+        }},
+        {field: 'Version', title: '版本', formatter: function (v, row) {
+            return v || (row.Details && row.Details.version) || '';
+        }},
+        {field: 'ConnAddr', title: '连接地址', formatter: function (v, row) {
+            return v || (row.Details && row.Details.addr) || '';
+        }},
+        {field: 'Details', title: '详情', formatter: function (v) {
+            return npsDetailChips(v);
+        }},
+        {field: 'Result', title: '结果', formatter: function (v) { return npsResultBadge(v); }},
+        {field: 'Error', title: '错误'}
+    ]
+});
+npsBindToolbarRefresh('#table', ['#filter_actor', '#filter_action', '#filter_resource', '#filter_result']);
+</script>

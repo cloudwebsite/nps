@@ -1,0 +1,143 @@
+<div class="wrapper wrapper-content animated fadeInRight">
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="ibox float-e-margins">
+                <div class="ibox-title">
+                    <h5 langtag="word-cert-catalog">证书目录</h5>
+                    <div class="ibox-tools">
+                        <a href="{{.web_base_url}}/serverconfig/index" class="btn btn-xs btn-white">服务端配置</a>
+                    </div>
+                </div>
+                <div class="ibox-content">
+                    {{if .catalog_msg}}<p class="text-danger">{{.catalog_msg}}</p>{{end}}
+                    <p class="help-block">扫描 <code>conf/webssl</code>、<code>conf/bridgessl</code>、<code>conf/certs</code> 下的证书；可绑定到面板/Bridge，或删除未被引用的文件。ACME 缓存仅展示摘要。</p>
+
+                    <h4>当前绑定</h4>
+                    <table class="table table-bordered table-condensed" style="max-width:720px;">
+                        <tr>
+                            <th>面板</th>
+                            <td>{{.web_cert_status.Status}} · <code>{{.web_cert_status.CertFilePath}}</code></td>
+                        </tr>
+                        <tr>
+                            <th>Bridge</th>
+                            <td>{{.bridge_cert_status.Status}} · <code>{{.bridge_cert_status.CertFilePath}}</code></td>
+                        </tr>
+                        <tr>
+                            <th>ACME</th>
+                            <td>
+                                {{if .acme_summary.Exists}}{{.acme_summary.RelPath}} · {{.acme_summary.FileCount}} 个文件
+                                {{else}}{{.acme_summary.Detail}}{{end}}
+                            </td>
+                        </tr>
+                    </table>
+
+                    <div class="table-responsive">
+                        <table class="table table-striped table-bordered table-hover">
+                            <thead>
+                            <tr>
+                                <th>目录</th>
+                                <th>文件</th>
+                                <th>主题 / 颁发者</th>
+                                <th>到期</th>
+                                <th>指纹</th>
+                                <th>引用</th>
+                                <th>操作</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {{range .catalog_entries}}
+                            <tr>
+                                <td><code>{{.Scope}}</code></td>
+                                <td>
+                                    <div>{{.FileName}}</div>
+                                    {{if .RelCertPath}}<small class="text-muted"><code>{{.RelCertPath}}</code></small>{{end}}
+                                    {{if .RelKeyPath}}<br><small class="text-muted"><code>{{.RelKeyPath}}</code></small>{{end}}
+                                </td>
+                                <td>
+                                    <div>{{if .Subject}}{{.Subject}}{{else}}—{{end}}</div>
+                                    <small class="text-muted">{{if .Issuer}}{{.Issuer}}{{else}}—{{end}}</small>
+                                    <div>
+                                        {{if .Valid}}
+                                        <span class="label label-primary">{{.Status}}</span>
+                                        {{else}}
+                                        <span class="label label-warning">{{.Status}}</span>
+                                        {{end}}
+                                    </div>
+                                </td>
+                                <td>
+                                    {{if .ExpiresAt}}{{.ExpiresAt}}<br><small>{{.DaysRemaining}} 天</small>{{else}}—{{end}}
+                                </td>
+                                <td><small style="word-break:break-all;">{{if .Fingerprint}}{{.Fingerprint}}{{else}}—{{end}}</small></td>
+                                <td>
+                                    {{range .Bindings}}
+                                    <div><small>{{.}}</small></div>
+                                    {{else}}
+                                    <span class="text-muted">未引用</span>
+                                    {{end}}
+                                </td>
+                                <td>
+                                    {{if and .HasKey .RelCertPath .Valid}}
+                                    <button type="button" class="btn btn-xs btn-primary" onclick="bindCert('{{.RelCertPath}}','{{.RelKeyPath}}','panel')">绑定面板</button>
+                                    <button type="button" class="btn btn-xs btn-success" onclick="bindCert('{{.RelCertPath}}','{{.RelKeyPath}}','bridge')">绑定 Bridge</button>
+                                    {{end}}
+                                    {{if .CanDelete}}
+                                    <button type="button" class="btn btn-xs btn-danger" onclick="deleteCert('{{.RelCertPath}}','{{.RelKeyPath}}')">删除</button>
+                                    {{else}}
+                                    <button type="button" class="btn btn-xs btn-danger" disabled title="仍被引用">删除</button>
+                                    {{end}}
+                                </td>
+                            </tr>
+                            {{else}}
+                            <tr>
+                                <td colspan="7" class="text-center text-muted">暂无托管证书。可在「服务端配置」上传/粘贴到 conf/webssl 或 conf/bridgessl。</td>
+                            </tr>
+                            {{end}}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+function bindCert(certPath, keyPath, target) {
+    $.ajax({
+        type: 'POST',
+        url: '{{.web_base_url}}/serverconfig/catalogbind',
+        data: { cert: certPath, key: keyPath, target: target },
+        success: function (res) {
+            if (res && res.status) {
+                showMsg(res.msg || 'ok', 'success', 2000);
+                setTimeout(function () { location.reload(); }, 800);
+            } else {
+                showMsg((res && res.msg) || 'error', 'error', 8000);
+            }
+        },
+        error: function (xhr, textStatus) {
+            showMsg(xhr.statusText || textStatus || 'error', 'error', 8000);
+        }
+    });
+}
+function deleteCert(certPath, keyPath) {
+    if (!confirm('确认删除该未引用的证书文件？')) {
+        return;
+    }
+    $.ajax({
+        type: 'POST',
+        url: '{{.web_base_url}}/serverconfig/catalogdelete',
+        data: { cert: certPath, key: keyPath },
+        success: function (res) {
+            if (res && res.status) {
+                showMsg(res.msg || 'ok', 'success', 1500);
+                setTimeout(function () { location.reload(); }, 600);
+            } else {
+                showMsg((res && res.msg) || 'error', 'error', 8000);
+            }
+        },
+        error: function (xhr, textStatus) {
+            showMsg(xhr.statusText || textStatus || 'error', 'error', 8000);
+        }
+    });
+}
+</script>

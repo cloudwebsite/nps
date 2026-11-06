@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+        (function () {
+            try {
+                var saved = localStorage.getItem('nps_ui_theme') || localStorage.getItem('nps-theme');
+                var theme = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme', theme);
+            } catch (e) {
+                document.documentElement.setAttribute('data-theme', 'light');
+            }
+        })();
+    </script>
+    <title langtag="title-register">{{.app_name}}</title>
+    <link href="{{.web_base_url}}/static/css/bootstrap-5.3.3.min.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/fontawesome.min.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/solid.min.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/toastr.min.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/nps-modern.css?v={{.version}}&ui=20261105-1" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/nps-console.css?v={{.version}}&ui=20261105-1" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/bootstrap-nps.css?v={{.version}}&ui=20261105-1" rel="stylesheet">
+    <script src="{{.web_base_url}}/static/js/bootstrap-5.3.3.bundle.min.js?v={{.version}}"></script>
+    <script src="{{.web_base_url}}/static/js/jquery-3.4.1.min.js?v={{.version}}"></script>
+    <script src="{{.web_base_url}}/static/js/toastr.min.js?v={{.version}}"></script>
+    <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}&ui=20261106-3" type="text/javascript"></script>
+</head>
+
+<body class="gray-bg auth-body nps-bootstrap">
+<div class="auth-page">
+    <header class="auth-page__header">
+        <div class="auth-brand" aria-label="{{.app_name}}">
+            <span class="auth-brand__mark" aria-hidden="true"><i class="fa fa-project-diagram"></i></span>
+            <span class="auth-brand__name" langtag="application">{{.app_name}}</span>
+            {{if .web_welcome}}<span class="nps-env-badge">{{.web_welcome}}</span>{{end}}
+        </div>
+        <div class="auth-page__tools">
+            <div class="auth-language btn-group dropdown">
+                <button id="languagemenu" class="btn btn-default dropdown-toggle auth-language__toggle" type="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                    <i class="fa fa-globe-asia" aria-hidden="true"></i><span></span>
+                </button>
+                <ul class="dropdown-menu"></ul>
+            </div>
+        </div>
+    </header>
+    <main class="auth-page__main">
+        <div class="auth-layout auth-layout--single">
+            <section class="auth-panel" aria-labelledby="auth-register-title">
+                <header class="auth-panel__header">
+                    <h2 class="auth-panel__title" id="auth-register-title" langtag="info-register"></h2>
+                    <p class="help-block" langtag="info-createaccount"></p>
+                </header>
+                <form class="form auth-form nps-form" onsubmit="return register()">
+                    <div class="form-group auth-field">
+                        <label class="auth-field__label" langtag="word-username"></label>
+                        <input type="text" class="form-control" placeholder="username" name="username" required langtag="word-username">
+                    </div>
+                    <div class="form-group auth-field">
+                        <label class="auth-field__label" langtag="word-password"></label>
+                        <input type="password" class="form-control" placeholder="password" name="password" required langtag="word-password">
+                    </div>
+                    {{if eq true .email_verify}}
+                    <div class="form-group auth-field">
+                        <label class="auth-field__label">Email</label>
+                        <input type="email" class="form-control" placeholder="email" name="email" required>
+                    </div>
+                    <div class="form-group auth-field">
+                        <label class="auth-field__label">Email code</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" placeholder="email code" name="email_code" required>
+                            <button class="btn btn-outline-secondary" type="button" onclick="sendEmailCode()" id="btnEmailCode">发送验证码</button>
+                        </div>
+                    </div>
+                    {{end}}
+                    {{if eq true .captcha_open}}
+                    <div class="form-group auth-field">
+                        <label class="auth-field__label" langtag="word-captcha"></label>
+                        {{create_captcha}}
+                        <input name="captcha" class="form-control" placeholder="captcha" required langtag="word-captcha">
+                    </div>
+                    {{end}}
+                    <button type="submit" class="auth-submit login-btn" langtag="word-register"></button>
+                </form>
+                <div class="auth-switch">
+                    <span class="auth-switch__copy" langtag="info-haveaccount"></span>
+                    <a class="auth-switch__link" href="{{.web_base_url}}/login/index" langtag="word-login"></a>
+                </div>
+            </section>
+        </div>
+    </main>
+    <footer class="auth-page__footer">
+        <span><strong langtag="word-copyright"></strong> <span langtag="application"></span> &copy; 2018-2026</span>
+    </footer>
+</div>
+<script>
+    window.nps = { "web_base_url": "{{.web_base_url}}", "version": "{{.version}}", "app_name": "{{.app_name}}" };
+    var emailCooldown = {{.email_code_cooldown}};
+    function register() {
+        $.ajax({
+            type: "POST",
+            url: "{{.web_base_url}}/login/register",
+            data: $("form").serializeArray(),
+            success: function (res) {
+                if (window.toastr) { res.status ? toastr.success(res.msg) : toastr.error(res.msg); } else { alert(res.msg); }
+                if (res.status) window.location.href = "{{.web_base_url}}/login/index";
+            }
+        });
+        return false;
+    }
+    function sendEmailCode() {
+        var email = $("input[name=email]").val();
+        if (!email) { alert("请填写邮箱"); return; }
+        var btn = $("#btnEmailCode");
+        btn.prop("disabled", true);
+        $.ajax({
+            type: "POST",
+            url: "{{.web_base_url}}/login/registeremailcode",
+            data: { email: email },
+            success: function (res) {
+                if (window.toastr) toastr.info(res.msg); else alert(res.msg);
+                var wait = res.retry_after || emailCooldown || 60;
+                var left = wait;
+                var timer = setInterval(function () {
+                    left--;
+                    if (left <= 0) {
+                        clearInterval(timer);
+                        btn.prop("disabled", false).text("发送验证码");
+                    } else {
+                        btn.text(left + "s");
+                    }
+                }, 1000);
+            },
+            error: function () { btn.prop("disabled", false); }
+        });
+    }
+</script>
+</body>
+</html>

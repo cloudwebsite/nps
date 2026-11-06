@@ -1,0 +1,34 @@
+.idea
+
+# Go build outputs（仅根目录产物；勿写裸名 nps，否则会忽略 cmd/nps/）
+/npc
+/nps
+/nps.exe
+/npc.exe
+
+# Node.js
+node_modules/
+pnpm-lock.yaml
+
+# VuePress（文档站锁文件不入库；GUI frontend/yarn.lock 需要入库供 CI cache）
+docs/.vuepress/.cache/
+docs/.vuepress/.temp/
+docs/.vuepress/dist/
+docs/vuepress-dev.log
+docs/vuepress-dev.err.log
+docs/vuepress-dev.pid
+docs/node_modules/
+docs/yarn.lock
+docs/.vscode
+
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local CodeGraph index
+.codegraph/
+
+# go mod vendor 仅 CI 临时生成，不入库
+/vendor/
+
