@@ -1,0 +1,5 @@
+﻿# GeoIP 二进制体积大，勿提交；用 nps -updategeo 或面板更新
+geoip.dat
+geosite.dat
+geodata.version
+waf.json

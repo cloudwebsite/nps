@@ -1,0 +1,790 @@
+package main
+
+import (
+	"bufio"
+	"ehang.io/nps/lib/crypt"
+	"flag"
+	"fmt"
+	"os"
+	"os/exec"
+	"runtime"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"ehang.io/nps/client"
+	"ehang.io/nps/lib/common"
+	"ehang.io/nps/lib/config"
+	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/install"
+	"ehang.io/nps/lib/version"
+	"github.com/astaxie/beego/logs"
+	"github.com/ccding/go-stun/stun"
+	"github.com/fatih/color"
+	"github.com/kardianos/service"
+)
+
+const serviceNamePrefix = "nps-client-"
+
+var (
+	serverAddr     = flag.String("server", "", "Server addr (ip:port)；多入口用逗号分隔，如 a:8024,b:8024")
+	configPath     = flag.String("config", "", "Configuration file path")
+	verifyKey      = flag.String("vkey", "", "Authentication key；可逗号分隔多密钥")
+	logType        = flag.String("log", "stdout", "Log output mode（stdout|file）")
+	connType       = flag.String("type", "tcp", "Connection type（kcp|tcp|tls）；可逗号分隔与 server 对齐")
+	proxyUrl       = flag.String("proxy", "", "proxy socks5 url(eg:socks5://111:222@127.0.0.1:9007)")
+	logLevel       = flag.String("log_level", "7", "log level 0~7")
+	registerTime   = flag.Int("time", 2, "register time long /h")
+	localPort      = flag.Int("local_port", 2000, "p2p local port")
+	password       = flag.String("password", "", "p2p password flag")
+	target         = flag.String("target", "", "p2p target")
+	localType      = flag.String("local_type", "p2p", "p2p target")
+	logPath        = flag.String("log_path", "", "npc log path")
+	debug          = flag.Bool("debug", true, "npc debug")
+	pprofAddr      = flag.String("pprof", "", "PProf debug addr (ip:port)")
+	stunAddr       = flag.String("stun_addr", "stun.stunprotocol.org:3478", "stun server address (eg:stun.stunprotocol.org:3478)")
+	p2pMode        = flag.String("p2p_mode", "legacy", "P2P mode: legacy|stun|modern（默认 legacy）")
+	p2pHolepunch   = flag.String("p2p_holepunch", "", "holepunch 协调器 host:port（仅 modern；空=不启用）")
+	releaseAPI     = flag.String("release_api", "", "自定义 releases/latest API（空=GitHub）")
+	releaseBase    = flag.String("release_download_base", "", "自定义 release 下载前缀（空=GitHub）")
+	ver            = flag.Bool("version", false, "show current version")
+	disconnectTime = flag.Int("disconnect_timeout", 60, "not receiving check packet times, until timeout will disconnect the client")
+	tlsEnable      = flag.Bool("tls_enable", false, "enable tls")
+	tlsFingerprint = flag.String("tls_fingerprint", "", "server bridge cert SHA-256 fingerprint; empty = legacy behavior")
+	tlsStrict      = flag.Bool("tls_strict", false, "require tls_fingerprint when tls_enable, refuse to start otherwise")
+)
+
+func main() {
+	flag.Parse()
+	logs.Reset()
+	logs.EnableFuncCallDepth(true)
+	logs.SetLogFuncCallDepth(3)
+	// 菜单更新与面板远程升级共用 AfterClientUpdate 时，先重启已注册的 nps-client-* 服务
+	install.RestartServicesHook = restartSystemServices
+	if *ver {
+		common.PrintVersion()
+		return
+	}
+	if *logPath == "" {
+		*logPath = common.GetNpcLogPath()
+	}
+	if common.IsWindows() {
+		*logPath = strings.Replace(*logPath, "\\", "\\\\", -1)
+	}
+	if *debug {
+		logs.SetLogger(logs.AdapterConsole, `{"level":`+*logLevel+`,"color":true}`)
+	} else {
+		logs.SetLogger(logs.AdapterFile, `{"level":`+*logLevel+`,"filename":"`+*logPath+`","daily":false,"maxlines":100000,"color":true}`)
+	}
+
+	// init service
+	options := make(service.KeyValue)
+	svcConfig := &service.Config{
+		Name:        "Npc",
+		DisplayName: "nps内网穿透客户端",
+		Description: "一款轻量级、功能强大的内网穿透代理服务器。支持tcp、udp流量转发，支持内网http代理、内网socks5代理，同时支持snappy压缩、站点保护、加密传输、多路复用、header修改等。支持web图形化管理，集成多用户模式。",
+		Option:      options,
+	}
+	if !common.IsWindows() {
+		svcConfig.Dependencies = []string{
+			"Requires=network.target",
+			"After=network-online.target syslog.target"}
+		svcConfig.Option["SystemdScript"] = install.SystemdScript
+		svcConfig.Option["SysvScript"] = install.SysvScript
+	}
+	for _, v := range os.Args[1:] {
+		switch v {
+		case "install", "start", "stop", "uninstall", "restart":
+			continue
+		}
+		if !strings.Contains(v, "-service=") && !strings.Contains(v, "-debug=") {
+			svcConfig.Arguments = append(svcConfig.Arguments, v)
+		}
+	}
+	svcConfig.Arguments = append(svcConfig.Arguments, "-debug=false")
+	prg := &npc{
+		exit: make(chan struct{}),
+	}
+	s, err := service.New(prg, svcConfig)
+	if err != nil {
+		logs.Error(err, "service function disabled")
+		run()
+		// run without service
+		wg := sync.WaitGroup{}
+		wg.Add(1)
+		wg.Wait()
+		return
+	}
+	if len(os.Args) >= 2 {
+		switch os.Args[1] {
+		case "status":
+			if len(os.Args) > 2 {
+				path := strings.Replace(os.Args[2], "-config=", "", -1)
+				client.GetTaskStatus(path)
+			}
+		case "register":
+			flag.CommandLine.Parse(os.Args[2:])
+			client.RegisterLocalIp(*serverAddr, *verifyKey, *connType, *proxyUrl, *registerTime)
+			case "update":
+				flag.CommandLine.Parse(os.Args[2:])
+				install.SetReleaseSource(*releaseAPI, *releaseBase)
+				if env := common.GetEnvMap(); strings.TrimSpace(env["NPC_RELEASE_API"]) != "" || strings.TrimSpace(env["NPC_RELEASE_DOWNLOAD_BASE"]) != "" {
+					install.SetReleaseSource(env["NPC_RELEASE_API"], env["NPC_RELEASE_DOWNLOAD_BASE"])
+				}
+				// 与菜单/远程升级同一套取包逻辑；成功后只重启已注册服务（不 relaunch「npc update」以免二次跑更新）
+				if res := install.UpdateNpcNew(); res.Updated {
+					install.RestartClientServices()
+				}
+				return
+		case "nat":
+			c := stun.NewClient()
+			flag.CommandLine.Parse(os.Args[2:])
+			c.SetServerAddr(*stunAddr)
+			nat, host, err := c.Discover()
+			if err != nil || host == nil {
+				logs.Error("get nat type error", err)
+				return
+			}
+			fmt.Printf("nat type: %s \npublic address: %s\n", nat.String(), host.String())
+			os.Exit(0)
+		case "start", "stop", "restart":
+			// support busyBox and sysV, for openWrt
+			if service.Platform() == "unix-systemv" {
+				logs.Info("unix-systemv service")
+				cmd := exec.Command("/etc/init.d/"+svcConfig.Name, os.Args[1])
+				err := cmd.Run()
+				if err != nil {
+					logs.Error(err)
+				}
+				return
+			}
+			err := service.Control(s, os.Args[1])
+			if err != nil {
+				logs.Error("Valid actions: %q\n%s", service.ControlAction, err.Error())
+			}
+			return
+		case "install":
+			service.Control(s, "stop")
+			service.Control(s, "uninstall")
+			install.InstallNpc()
+			err := service.Control(s, os.Args[1])
+			if err != nil {
+				logs.Error("Valid actions: %q\n%s", service.ControlAction, err.Error())
+			}
+			if service.Platform() == "unix-systemv" {
+				logs.Info("unix-systemv service")
+				confPath := "/etc/init.d/" + svcConfig.Name
+				os.Symlink(confPath, "/etc/rc.d/S90"+svcConfig.Name)
+				os.Symlink(confPath, "/etc/rc.d/K02"+svcConfig.Name)
+			}
+			return
+		case "uninstall":
+			err := service.Control(s, os.Args[1])
+			if err != nil {
+				logs.Error("Valid actions: %q\n%s", service.ControlAction, err.Error())
+			}
+			if service.Platform() == "unix-systemv" {
+				logs.Info("unix-systemv service")
+				os.Remove("/etc/rc.d/S90" + svcConfig.Name)
+				os.Remove("/etc/rc.d/K02" + svcConfig.Name)
+			}
+			return
+		}
+	}
+	s.Run()
+}
+
+type npc struct {
+	exit chan struct{}
+}
+
+func (p *npc) Start(s service.Service) error {
+	go p.run()
+	return nil
+}
+func (p *npc) Stop(s service.Service) error {
+	close(p.exit)
+	if service.Interactive() {
+		os.Exit(0)
+	}
+	return nil
+}
+
+func (p *npc) run() error {
+	defer func() {
+		if err := recover(); err != nil {
+			const size = 64 << 10
+			buf := make([]byte, size)
+			buf = buf[:runtime.Stack(buf, false)]
+			logs.Warning("npc: panic serving %v: %v\n%s", err, string(buf))
+		}
+	}()
+	run()
+	select {
+	case <-p.exit:
+		logs.Warning("stop...")
+	}
+	return nil
+}
+
+// applyNpcTlsFlags 应用命令行 TLS / 指纹选项；失败返回 false。
+func applyNpcTlsFlags() bool {
+	client.SetTlsEnable(*tlsEnable)
+	client.SetTlsFingerprint(*tlsFingerprint)
+	if *tlsEnable && *tlsStrict && strings.TrimSpace(*tlsFingerprint) == "" {
+		logs.Error("tls_strict=true 但未配置 tls_fingerprint，拒绝启动")
+		return false
+	}
+	if *tlsEnable && strings.TrimSpace(*tlsFingerprint) == "" {
+		logs.Warn("TLS 已启用但未配置 tls_fingerprint：仅防被动窃听，不防中间人；建议配置服务端指纹")
+	}
+	return true
+}
+
+func run() {
+	common.InitPProfFromArg(*pprofAddr)
+	//p2p or secret command
+	if *password != "" {
+		if !applyNpcTlsFlags() {
+			return
+		}
+		if err := client.SetP2PMode(*p2pMode); err != nil {
+			logs.Warn("%v；回退 legacy", err)
+		}
+		client.SetP2PStunServer(*stunAddr)
+		client.SetP2PHolepunchAddr(*p2pHolepunch)
+		logs.Info("the version of client is %s, the core version of client is %s,tls enable is %t, p2p_mode=%s", version.VERSION, version.GetVersion(), client.GetTlsEnable(), client.P2PModeName())
+		commonConfig := new(config.CommonConfig)
+		commonConfig.Server = *serverAddr
+		commonConfig.VKey = *verifyKey
+		commonConfig.Tp = *connType
+		localServer := new(config.LocalServer)
+		localServer.Type = *localType
+		localServer.Password = *password
+		localServer.Target = *target
+		localServer.Port = *localPort
+		commonConfig.Client = new(file.Client)
+		commonConfig.Client.Cnf = new(file.Config)
+		go client.StartLocalServer(localServer, commonConfig)
+		return
+	}
+	env := common.GetEnvMap()
+	if *serverAddr == "" {
+		*serverAddr, _ = env["NPC_SERVER_ADDR"]
+	}
+	if *verifyKey == "" {
+		*verifyKey, _ = env["NPC_SERVER_VKEY"]
+	}
+	if *verifyKey != "" && *serverAddr != "" && *configPath == "" {
+		if err := client.SetP2PMode(*p2pMode); err != nil {
+			logs.Warn("%v；回退 legacy", err)
+		}
+		client.SetP2PStunServer(*stunAddr)
+		hp := strings.TrimSpace(*p2pHolepunch)
+		if hp == "" {
+			hp = strings.TrimSpace(env["NPC_P2P_HOLEPUNCH"])
+		}
+		client.SetP2PHolepunchAddr(hp)
+		install.SetReleaseSource(*releaseAPI, *releaseBase)
+		if envAPI := strings.TrimSpace(env["NPC_RELEASE_API"]); envAPI != "" || strings.TrimSpace(env["NPC_RELEASE_DOWNLOAD_BASE"]) != "" {
+			install.SetReleaseSource(env["NPC_RELEASE_API"], env["NPC_RELEASE_DOWNLOAD_BASE"])
+		}
+		connections := expandNpcConnections(*serverAddr, *verifyKey, *connType, *tlsEnable)
+		if len(connections) == 0 {
+			logs.Error("server 或 vkey 无效")
+			return
+		}
+		logs.Info("the version of client is %s, the core version of client is %s, p2p_mode=%s, entries=%d",
+			version.VERSION, version.GetVersion(), client.P2PModeName(), len(connections))
+		for _, connCfg := range connections {
+			connCfg := connCfg
+			go func() {
+				for {
+					client.SetTlsEnable(connCfg.tls)
+					client.SetTlsFingerprint(*tlsFingerprint)
+					if connCfg.tls && *tlsStrict && strings.TrimSpace(*tlsFingerprint) == "" {
+						logs.Error("tls 入口需要 tls_fingerprint（tls_strict）")
+						time.Sleep(time.Second * 5)
+						continue
+					}
+					logs.Info("start server=%s vkey=%s type=%s tls=%t", connCfg.server, connCfg.vkey, connCfg.transport, connCfg.tls)
+					client.NewRPClient(connCfg.server, connCfg.vkey, connCfg.transport, *proxyUrl, nil, *disconnectTime).Start()
+					logs.Info("Client closed! It will be reconnected in five seconds")
+					time.Sleep(time.Second * 5)
+				}
+			}()
+		}
+
+	} else {
+		if *configPath == "" {
+			*configPath = common.GetConfigPath()
+		}
+
+		// 判断路径下是否有配置文件
+		if common.FileExists(*configPath) {
+			logs.Info("配置文件模式启动")
+			go client.StartFromFile(*configPath)
+		} else {
+			// 无配置文件模式双击运行
+			printSlogan()
+			inputCmd()
+		}
+	}
+}
+
+func printSlogan() {
+	green := color.New(color.FgGreen).SprintFunc()
+	// 第一次输入，如果输入 1,2,3，4 则需要输入秘钥，否则
+
+	fmt.Printf("%s", green(""))
+
+	fmt.Printf("\033[32;0m###########################################################\n")
+	fmt.Printf("\033[32;0m#                   \033[31mNPS内网穿透客户端\033[0m                     #\n")
+	fmt.Printf("\033[32;0m#                            			          #\n")
+	fmt.Printf("\033[32;0m#\033[32m 地址：\033[31;0mhttps://github.com/cloudwebsite/nps\033[0m             #\n")
+	fmt.Printf("\033[32;0m#\033[32m 提示：\033[32;0m1、涉及到系统服务的需要以管理员/root身份运行\033[0m\033[32;0m	  #\n")
+	fmt.Printf("\033[32;0m#\033[32m       \033[32;0m2、直接启动或[注册系统服务]需要使用[快捷启动命令]\033[0m\033[32;0m #\n")
+	fmt.Printf("\033[32;0m#\033[32m       \033[32;0m3、卸载/启动/停止服务只需要输入[vkey]\033[0m\033[32;0m	          #\n")
+	fmt.Printf("\033[32;0m###########################################################\n")
+	fmt.Printf("\033[0m") // 重置颜色
+
+	fmt.Printf("\n")
+
+	fmt.Printf("\u001B[32m输入[1]\u001B[0m - 注册系统服务\n")
+	fmt.Printf("\u001B[32m输入[2]\u001B[0m - 卸载系统服务\n")
+	fmt.Printf("---------------------\n")
+	fmt.Printf("\u001B[32m输入[3]\u001B[0m - 启动系统服务\n")
+	fmt.Printf("\u001B[32m输入[4]\u001B[0m - 停止系统服务\n")
+	fmt.Printf("\u001B[32m输入[5]\u001B[0m - 查看系统服务\n")
+	fmt.Printf("---------------------\n")
+	fmt.Printf("\u001B[32m输入[6]\u001B[0m - 更新客户端\n")
+	fmt.Printf("\u001B[32m输入[0]\u001B[0m - 退出\n")
+	fmt.Printf("---------------------\n")
+	fmt.Printf("\u001B[32m当前版本：%s\u001B[0m\n", version.VERSION)
+	fmt.Printf("直接输入[快捷启动命令]则是启动隧道,多个[快捷启动命令]用英文逗号拼接\n")
+	fmt.Printf("\n")
+}
+
+// installedServiceVkeys 获取当前已注册到系统的 npc 服务密钥
+func installedServiceVkeys() ([]string, error) {
+	if common.IsWindows() {
+		return installedServiceVkeysWindows()
+	}
+	return installedServiceVkeysUnix()
+}
+
+func installedServiceVkeysWindows() ([]string, error) {
+	out, err := exec.Command("sc", "query", "state=", "all").Output()
+	if err != nil {
+		return nil, err
+	}
+
+	const serviceNameField = "SERVICE_NAME:"
+	vkeys := make([]string, 0)
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if len(line) <= len(serviceNameField) || !strings.EqualFold(line[:len(serviceNameField)], serviceNameField) {
+			continue
+		}
+		name := strings.TrimSpace(line[len(serviceNameField):])
+		if len(name) <= len(serviceNamePrefix) || !strings.HasPrefix(strings.ToLower(name), serviceNamePrefix) {
+			continue
+		}
+		vkeys = append(vkeys, name[len(serviceNamePrefix):])
+	}
+	sort.Strings(vkeys)
+	return vkeys, nil
+}
+
+func installedServiceVkeysUnix() ([]string, error) {
+	// 各平台服务定义文件所在目录及文件后缀
+	unitDirs := []struct {
+		dir    string
+		suffix string
+	}{
+		// systemd
+		{"/etc/systemd/system", ".service"},
+		{"/lib/systemd/system", ".service"},
+		{"/usr/lib/systemd/system", ".service"},
+		// sysv（含 OpenWrt）
+		{"/etc/init.d", ""},
+		// upstart
+		{"/etc/init", ".conf"},
+		// launchd
+		{"/Library/LaunchDaemons", ".plist"},
+		{"/Library/LaunchAgents", ".plist"},
+	}
+
+	seen := make(map[string]struct{})
+	vkeys := make([]string, 0)
+	for _, unit := range unitDirs {
+		entries, err := os.ReadDir(unit.dir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			name := entry.Name()
+			if unit.suffix != "" {
+				if !strings.HasSuffix(name, unit.suffix) {
+					continue
+				}
+				name = strings.TrimSuffix(name, unit.suffix)
+			}
+			if len(name) <= len(serviceNamePrefix) || !strings.HasPrefix(name, serviceNamePrefix) {
+				continue
+			}
+			vkey := name[len(serviceNamePrefix):]
+			if _, ok := seen[vkey]; ok {
+				continue
+			}
+			seen[vkey] = struct{}{}
+			vkeys = append(vkeys, vkey)
+		}
+	}
+	sort.Strings(vkeys)
+	return vkeys, nil
+}
+
+// listSystemServices 列出当前已注册到系统的 npc 服务，方便进行启动、停止、卸载等操作
+func listSystemServices() {
+	vkeys, err := installedServiceVkeys()
+	if err != nil {
+		fmt.Println("获取系统服务列表失败：", err)
+		return
+	}
+	if len(vkeys) == 0 {
+		fmt.Println("无注册 NPC 服务")
+		return
+	}
+
+	for _, vkey := range vkeys {
+		status := getServiceStatus(vkey)
+		switch status {
+		case "运行中":
+			status = color.GreenString("[%s]", status)
+		case "已停止":
+			status = color.RedString("[%s]", status)
+		default:
+			status = fmt.Sprintf("[%s]", status)
+		}
+		fmt.Printf("%s  %s\n", vkey, status)
+	}
+}
+
+// restartSystemServices 重启当前正在运行的 npc 系统服务，使更新后的客户端生效
+func restartSystemServices() {
+	vkeys, err := installedServiceVkeys()
+	if err != nil {
+		fmt.Println("获取系统服务列表失败：", err)
+		return
+	}
+	for _, vkey := range vkeys {
+		s, err := service.New(&npc{exit: make(chan struct{})}, &service.Config{Name: serviceNamePrefix + vkey})
+		if err != nil {
+			fmt.Println("隧道["+vkey+"]服务重启失败", err)
+			continue
+		}
+		status, err := s.Status()
+		if err != nil || status != service.StatusRunning {
+			// 未运行的服务保持原状态，下次启动时自然使用新版本
+			continue
+		}
+		if err := service.Control(s, "restart"); err != nil {
+			fmt.Println("隧道["+vkey+"]服务重启失败", err)
+			continue
+		}
+		fmt.Println("隧道[" + vkey + "]服务已重启")
+	}
+}
+
+// getServiceStatus 获取指定vkey对应系统服务的运行状态
+func getServiceStatus(vkey string) string {
+	s, err := service.New(&npc{exit: make(chan struct{})}, &service.Config{Name: serviceNamePrefix + vkey})
+	if err != nil {
+		return "状态未知"
+	}
+	status, err := s.Status()
+	if err != nil {
+		return "状态未知"
+	}
+	switch status {
+	case service.StatusRunning:
+		return "运行中"
+	case service.StatusStopped:
+		return "已停止"
+	default:
+		return "状态未知"
+	}
+}
+
+func inputCmd() {
+
+	var flag string
+	fmt.Printf("请输入：")
+
+	stdin := bufio.NewReader(os.Stdin)
+	_, err := fmt.Fscanln(stdin, &flag)
+	if err != nil {
+		fmt.Println("输入有误")
+	} else {
+		if flag == "0" {
+			os.Exit(0)
+		}
+
+		flag := strings.Replace(flag, " ", "", -1)
+
+		// 如果输入不等于 1,2,3,4,5,6，则启动隧道
+		if flag != "1" && flag != "2" && flag != "3" && flag != "4" && flag != "5" && flag != "6" {
+
+			vkeys := strings.Split(flag, `,`)
+			var cmdArray []string
+
+			for _, key := range vkeys {
+				startCmd, err := crypt.Base64Decoding(key)
+				if err != nil {
+					fmt.Println("快捷启动命令解析失败")
+					inputCmd()
+					return
+				}
+
+				cmdArray = append(cmdArray, startCmd)
+			}
+
+			for _, item := range cmdArray {
+				startNpcServer(item)
+			}
+
+		} else {
+			switch flag {
+			case "5":
+				listSystemServices()
+				inputCmd()
+			case "6":
+				if res := install.UpdateNpcNew(); res.Updated {
+					install.AfterClientUpdate()
+				}
+				inputCmd()
+			default:
+				systemService(flag)
+			}
+		}
+	}
+}
+
+func startNpcServer(startCmd string) {
+	var serAddr string
+	var vkey string
+	var tls string
+	array := strings.Fields(startCmd)
+	serAddr = array[0]
+	vkey = array[1]
+	if len(array) > 2 {
+		tls = array[2]
+	}
+	go func() {
+		for {
+			if tls == "-tls_enable=true" || tls == "true" {
+				client.SetTlsEnable(true)
+				logs.Info("start cmd:-server=" + serAddr + " -vkey=" + vkey + " " + tls)
+				logs.Info("the version of client is %s, the core version of client is %s,tls enable is %t", version.VERSION, version.GetVersion(), client.GetTlsEnable())
+			} else {
+				client.SetTlsEnable(false)
+				logs.Info("start cmd:-server=" + serAddr + " -vkey=" + vkey)
+				logs.Info("the version of client is %s, the core version of client is %s", version.VERSION, version.GetVersion())
+			}
+
+			client.NewRPClient(serAddr, vkey, *connType, *proxyUrl, nil, *disconnectTime).Start()
+			logs.Info("Client closed! It will be reconnected in five seconds")
+			time.Sleep(time.Second * 5)
+		}
+	}()
+}
+
+func systemService(flag string) {
+
+	if flag == "1" {
+		fmt.Printf("请输入[快捷启动命令],多个[快捷启动命令]用英文逗号拼接：")
+	} else {
+		fmt.Printf("请输入[VKEY],多个[VKEY]用英文逗号拼接：")
+	}
+
+	var vkey string
+	stdin := bufio.NewReader(os.Stdin)
+	_, err := fmt.Fscanln(stdin, &vkey)
+
+	if err != nil {
+		fmt.Println("输入错误，请重试")
+		systemService(flag)
+		return
+	} else {
+		if vkey == "0" {
+			os.Exit(0)
+		}
+	}
+
+	vkey = strings.Replace(vkey, " ", "", -1)
+
+	vkeys := strings.Split(vkey, `,`)
+
+	if flag == "1" {
+		var cmdArray []string
+		for _, key := range vkeys {
+			startCmd, err := crypt.Base64Decoding(key)
+			if err != nil {
+				fmt.Println("快捷启动命令解析失败")
+				systemService(flag)
+				return
+			}
+			cmdArray = append(cmdArray, startCmd)
+		}
+
+		for _, item := range cmdArray {
+			array := strings.Fields(item)
+
+			tls := "false"
+			if len(array) > 2 {
+				tls = array[2]
+			}
+			// tls
+			if tls == "-tls_enable=true" || tls == "true" {
+				systemPro(flag, array[0], array[1], true)
+			} else {
+				systemPro(flag, array[0], array[1], false)
+			}
+		}
+	} else {
+		for _, key := range vkeys {
+			systemPro(flag, "", key, false)
+		}
+
+	}
+
+	inputCmd()
+	return
+}
+
+func systemPro(flag string, serAddr string, vkey string, tls bool) {
+	// init service
+	prg := &npc{
+		exit: make(chan struct{}),
+	}
+	options := make(service.KeyValue)
+	svcConfig := &service.Config{
+		Name:        serviceNamePrefix + vkey,
+		DisplayName: serviceNamePrefix + vkey,
+		Description: "NPS内网穿透客户端，支持tcp、udp流量转发，支持内网http代理，地址：https://github.com/cloudwebsite/nps",
+		Option:      options,
+	}
+	s, _ := service.New(prg, svcConfig)
+
+	switch flag {
+	case "1":
+		svcConfig.Arguments = append(svcConfig.Arguments, "-server="+serAddr)
+		svcConfig.Arguments = append(svcConfig.Arguments, "-vkey="+vkey)
+		if tls {
+			svcConfig.Arguments = append(svcConfig.Arguments, "-tls_enable=true")
+		}
+		svcConfig.Arguments = append(svcConfig.Arguments, "-debug=false")
+
+		*logPath = common.GetNpcLogPath()
+		if common.IsWindows() {
+			*logPath = strings.Replace(*logPath, "\\", "\\\\", -1)
+		}
+
+		*logPath = strings.Replace(*logPath, "npc.log", "npc-"+vkey+".log", -1)
+		svcConfig.Arguments = append(svcConfig.Arguments, "-log_path="+*logPath)
+
+		logs.NewLogger()
+		logs.Reset()
+		logs.EnableFuncCallDepth(true)
+		logs.SetLogFuncCallDepth(3)
+		logs.SetLogger(logs.AdapterFile, `{"level":`+*logLevel+`,"filename":"`+*logPath+`","daily":false,"maxlines":100000,"color":true}`)
+
+		install.InstallNpc()
+		err := service.Control(s, "install")
+		if err != nil {
+			fmt.Println("隧道["+vkey+"]安装到系统服务失败", err)
+			return
+		} else {
+			fmt.Println("隧道[" + vkey + "]已经安装到系统")
+		}
+		if service.Platform() == "unix-systemv" {
+			logs.Info("unix-systemv service")
+			confPath := "/etc/init.d/" + svcConfig.Name
+			os.Symlink(confPath, "/etc/rc.d/S90"+svcConfig.Name)
+			os.Symlink(confPath, "/etc/rc.d/K02"+svcConfig.Name)
+		}
+
+		err2 := service.Control(s, "start")
+		if err2 != nil {
+			fmt.Println("隧道["+vkey+"]启动服务失败", err2)
+		} else {
+			fmt.Println("隧道[" + vkey + "]服务已启动")
+		}
+
+		return
+	case "2":
+		// 卸载系统服务
+		err := service.Control(s, "stop")
+		if err != nil {
+			fmt.Println("隧道["+vkey+"]服务停止失败", err)
+		} else {
+			fmt.Println("隧道[" + vkey + "]服务已停止")
+		}
+
+		err = service.Control(s, "uninstall")
+		if err != nil {
+			fmt.Println("隧道["+vkey+"]服务卸载失败", err)
+		}
+		if service.Platform() == "unix-systemv" {
+			fmt.Println("unix-systemv service")
+			os.Remove("/etc/rc.d/S90" + svcConfig.Name)
+			os.Remove("/etc/rc.d/K02" + svcConfig.Name)
+		}
+
+		if err == nil {
+			fmt.Println("隧道[" + vkey + "]服务已卸载成功")
+		}
+
+		return
+
+	case "3":
+		//启动系统服务
+		if service.Platform() == "unix-systemv" {
+			logs.Info("unix-systemv service")
+			cmd := exec.Command("/etc/init.d/"+svcConfig.Name, "start")
+			err := cmd.Run()
+			if err != nil {
+				logs.Error(err)
+			}
+			return
+		}
+		err := service.Control(s, "start")
+		if err != nil {
+			fmt.Println("隧道["+vkey+"]服务启动失败", err)
+		} else {
+			fmt.Println("隧道[" + vkey + "]服务启动成功")
+		}
+
+		return
+	case "4":
+		if service.Platform() == "unix-systemv" {
+			logs.Info("unix-systemv service")
+			cmd := exec.Command("/etc/init.d/"+svcConfig.Name, "stop")
+			err := cmd.Run()
+			if err != nil {
+				logs.Error(err)
+			}
+			return
+		}
+		err := service.Control(s, "stop")
+		if err != nil {
+			fmt.Println("隧道["+vkey+"]服务停止失败", err)
+		} else {
+			fmt.Println("隧道[" + vkey + "]服务停止成功")
+		}
+
+		return
+	}
+}

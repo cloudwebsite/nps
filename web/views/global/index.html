@@ -1,0 +1,912 @@
+<style>
+    /* padding-top 由脚本按悬浮条高度写入，避免 slot 再占一块等高空白 */
+    .global-param-page .global-hero {
+        position: fixed;
+        /* 避开固定顶栏；left/width 由脚本对齐内容区，避免悬浮条变窄 */
+        top: 62px;
+        z-index: 1020;
+        box-sizing: border-box;
+        background: linear-gradient(135deg, #1ab394 0%, #18a689 55%, #12876f 100%);
+        border-radius: 8px;
+        color: #fff;
+        padding: 10px 16px;
+        box-shadow: 0 8px 24px rgba(18, 135, 111, .28);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px 16px;
+        flex-wrap: nowrap;
+    }
+    .global-param-page .global-hero .hero-text {
+        display: flex;
+        align-items: baseline;
+        gap: 10px 14px;
+        flex-wrap: nowrap;
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+    .global-param-page .global-hero h2 {
+        margin: 0;
+        font-size: 17px;
+        font-weight: 600;
+        color: #fff;
+        white-space: nowrap;
+        flex: 0 0 auto;
+    }
+    .global-param-page .global-hero p {
+        margin: 0;
+        opacity: .88;
+        font-size: 12px;
+        line-height: 1.4;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .global-param-page .global-hero .btn-save {
+        background: #fff;
+        border-color: #fff;
+        color: #12876f;
+        font-weight: 600;
+        font-size: 13px;
+        padding: 6px 18px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, .12);
+        flex: 0 0 auto;
+    }
+    .global-param-page .global-hero .btn-save:hover,
+    .global-param-page .global-hero .btn-save:focus {
+        background: #f1fbf7;
+        border-color: #f1fbf7;
+        color: #0f7460;
+    }
+    .global-param-page .jump-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 0 0 16px;
+    }
+    .global-param-page .jump-nav a {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: var(--nps-primary-soft, #f1fbf7);
+        border: 1px solid var(--nps-line, #d7efe7);
+        color: var(--nps-primary, #12876f);
+        font-size: 12px;
+        text-decoration: none;
+    }
+    .global-param-page .jump-nav a:hover {
+        background: var(--nps-surface-hover, #e4f7f1);
+        color: var(--nps-primary-hover, #0f7460);
+    }
+    
+    /* 瀑布流：两列竖排填充，高度不等时中间不留大空白 */
+    .global-param-page .cards-masonry {
+        column-count: 2;
+        column-gap: 16px;
+    }
+    .global-param-page .cards-masonry > .setting-card {
+        display: inline-block;
+        width: 100%;
+        break-inside: avoid;
+        -webkit-column-break-inside: avoid;
+        page-break-inside: avoid;
+        margin: 0 0 16px;
+        vertical-align: top;
+        overflow: visible;
+    }
+    .global-param-page .cards-masonry > .card-span-2 {
+        width: 100%;
+        column-span: all;
+    }
+    @media (max-width: 991px) {
+        .global-param-page .cards-masonry {
+            column-count: 1;
+        }
+    }
+
+    .global-param-page .setting-card {
+        background: var(--nps-surface, #fff);
+        border: 1px solid var(--nps-line, #e7eaec);
+        border-radius: 6px;
+        margin-bottom: 20px;
+        box-shadow: var(--nps-shadow-sm, 0 1px 3px rgba(0, 0, 0, .04));
+        overflow: hidden;
+        color: var(--nps-ink, #2f4050);
+    }
+    .global-param-page .setting-card-head {
+        padding: 14px 20px;
+        border-bottom: 1px solid var(--nps-line, #f0f2f5);
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--nps-ink, #2f4050);
+        background: var(--nps-surface-subtle, #fbfcfd);
+    }
+    .global-param-page .setting-card-head i {
+        color: var(--nps-primary, #1ab394);
+        margin-right: 8px;
+        width: 18px;
+        text-align: center;
+    }
+    .global-param-page .setting-card-body {
+        padding: 8px 20px 18px;
+    }
+    .global-param-page .setting-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 15px 0;
+        border-bottom: 1px dashed var(--nps-line, #eef1f4);
+    }
+    .global-param-page .setting-row:last-child {
+        border-bottom: none;
+        padding-bottom: 4px;
+    }
+    .global-param-page .setting-title {
+        font-weight: 600;
+        color: var(--nps-ink, #2f4050);
+        margin-bottom: 4px;
+        line-height: 1.4;
+    }
+    .global-param-page .setting-desc {
+        color: var(--nps-muted, #98a6ad);
+        font-size: 12px;
+        line-height: 1.6;
+        max-width: 460px;
+    }
+    .global-param-page .setting-control {
+        flex: 0 0 auto;
+        padding-top: 2px;
+    }
+    .global-param-page .setting-field {
+        padding: 15px 0;
+        border-bottom: 1px dashed var(--nps-line, #eef1f4);
+    }
+    .global-param-page .setting-field:last-child {
+        border-bottom: none;
+    }
+    .global-param-page .setting-field > label {
+        font-weight: 600;
+        color: var(--nps-ink, #2f4050);
+        margin-bottom: 8px;
+        display: block;
+    }
+    .global-param-page .setting-field .help-block {
+        margin-top: 6px;
+        color: var(--nps-muted, #98a6ad);
+        font-size: 12px;
+    }
+    @media (max-width: 767px) {
+        .global-param-page .setting-row {
+            flex-direction: column;
+            gap: 10px;
+        }
+        .global-param-page .setting-desc {
+            max-width: none;
+        }
+        .global-param-page .global-hero {
+            flex-wrap: wrap;
+            top: 56px;
+        }
+        .global-param-page .global-hero .hero-text {
+            flex: 1 1 100%;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 2px;
+        }
+        .global-param-page .global-hero p {
+            white-space: normal;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+        }
+        .global-param-page .global-hero .btn-save {
+            width: 100%;
+        }
+    }
+</style>
+
+<div class="wrapper wrapper-content global-param-page">
+    <form class="form-horizontal" id="globalParamForm">
+        <div class="global-hero" id="global-param-hero">
+            <div class="hero-text">
+                <h2 langtag="word-globalparam"></h2>
+                <p langtag="info-globalparamsdesc"></p>
+            </div>
+            <button class="btn btn-save" type="button"
+                    onclick="submitform('global', '{{.web_base_url}}/global/save', $('#globalParamForm').serializeArray())">
+                <i class="fa fa-fw fa-check-circle"></i> <span langtag="word-save"></span>
+            </button>
+        </div>
+        <div class="jump-nav" id="global-jump-nav">
+            <a href="#card-basic"><span langtag="word-basicsettings">基础设置</span></a>
+            <a href="#card-security"><span langtag="word-securitysettings">安全设置</span></a>
+            <a href="#card-client"><span langtag="word-clientsettings">客户端限制</span></a>
+            <a href="#card-login"><span langtag="word-loginsettings">登录与账号</span></a>
+            <a href="#card-display"><span langtag="word-displaysettings">展示与高级</span></a>
+            <a href="#card-ops"><span langtag="word-ops">运维</span></a>
+            <a href="#card-runtime"><span langtag="word-runtimesecurity">运行时安全</span></a>
+            <a href="#card-waf"><span langtag="word-wafswitches">WAF 开关</span></a>
+            <a href="#card-smtp"><span langtag="word-registersmtp">注册与邮件</span></a>
+            <a href="#card-notify"><span langtag="word-notifyops">通知</span></a>
+            <a href="#card-geo">Geo 数据</a>
+        </div>
+
+        <div class="cards-masonry">
+<div class="setting-card" id="card-basic">
+                    <div class="setting-card-head">
+                        <i class="fa fa-server"></i><span langtag="word-basicsettings"></span>
+                    </div>
+                    <div class="setting-card-body">
+                        <div class="setting-field" id="app_name">
+                            <label langtag="word-appname"></label>
+                            <input class="form-control" value="{{.appName}}" type="text" name="appName"
+                                   maxlength="32" placeholder="NPS" langtag="info-appnametips">
+                            <span class="help-block m-b-none" langtag="info-appnametips"></span>
+                        </div>
+
+                        <div class="setting-field" id="web_welcome">
+                            <label langtag="word-webwelcome"></label>
+                            <input class="form-control" value="{{.webWelcome}}" type="text" name="webWelcome"
+                                   maxlength="64" placeholder="" langtag="info-webwelcometips">
+                            <span class="help-block m-b-none" langtag="info-webwelcometips"></span>
+                        </div>
+                        <div class="setting-field" id="web_subtitle">
+                            <label langtag="word-websubtitle"></label>
+                            <input class="form-control" value="{{.webSubtitle}}" type="text" name="webSubtitle"
+                                   maxlength="64" placeholder="" langtag="info-websubtitletips">
+                            <span class="help-block m-b-none" langtag="info-websubtitletips"></span>
+                        </div>
+
+                        <div class="setting-field" id="server_url">
+                            <label langtag="word-serverurl"></label>
+                            <input class="form-control" value="{{.serverUrl}}" type="text" name="serverUrl"
+                                   placeholder="" langtag="info-servertips">
+                            <span class="help-block m-b-none" langtag="info-servertips"></span>
+                        </div>
+
+                        <div class="setting-field" id="allow_ports">
+                            <label langtag="word-allowports"></label>
+                            <input class="form-control" value="{{.allowPorts}}" type="text" name="allowPorts"
+                                   placeholder="" langtag="info-allowportstips">
+                            <span class="help-block m-b-none" langtag="info-allowportstips"></span>
+                        </div>
+
+                        <div class="setting-row">
+                            <div class="setting-main">
+                                <div class="setting-title" langtag="word-showhttpport"></div>
+                                <div class="setting-desc" langtag="info-showhttptips"></div>
+                            </div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="showHttpProxyPort" value="1" class="onoffswitch-checkbox"
+                                           id="showHttpProxyPort" {{if .showHttpProxyPort}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="showHttpProxyPort">
+                                        <span class="onoffswitch-inner"></span>
+                                        <span class="onoffswitch-switch"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+<div class="setting-card" id="card-security">
+                    <div class="setting-card-head">
+                        <i class="fa fa-shield-alt"></i><span langtag="word-securitysettings"></span>
+                    </div>
+                    <div class="setting-card-body">
+                        <div class="setting-field" id="black_ip_list">
+                            <label langtag="word-globalblackiplist"></label>
+                            <textarea class="form-control" rows="4" type="text" name="globalBlackIpList"
+                                      placeholder="IP / CIDR / geoip:cn / geoip:!cn">{{.globalBlackIpList}}</textarea>
+                            <span class="help-block m-b-none">支持 IP、CIDR、geoip:类别；空=不限制。误配白名单可能锁死面板，可改 conf/global.json。</span>
+                        </div>
+                        <div class="setting-field" id="white_ip_list">
+                            <label>全局白名单</label>
+                            <textarea class="form-control" rows="4" type="text" name="globalWhiteIpList"
+                                      placeholder="IP / CIDR / geoip:cn">{{.globalWhiteIpList}}</textarea>
+                            <span class="help-block m-b-none">DenyFirst 时有白名单则必须命中；AllowFirst 时命中白名单优先放行。</span>
+                        </div>
+                        <div class="setting-field">
+                            <label>黑白名单优先级</label>
+                            <select class="form-control" name="globalIpListPriority">
+                                <option value="0" {{if eq .globalIpListPriority 0}}selected{{end}}>DenyFirst（默认：黑优先；有白则须命中）</option>
+                                <option value="1" {{if eq .globalIpListPriority 1}}selected{{end}}>AllowFirst（白优先；两边未命中也放行）</option>
+                            </select>
+                        </div>
+
+                        <div class="setting-row">
+                            <div class="setting-main">
+                                <div class="setting-title" langtag="word-iplimit"></div>
+                                <div class="setting-desc" langtag="info-iplimittips"></div>
+                            </div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="ipLimit" value="1" class="onoffswitch-checkbox"
+                                           id="ipLimit" {{if .ipLimit}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="ipLimit">
+                                        <span class="onoffswitch-inner"></span>
+                                        <span class="onoffswitch-switch"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+<div class="setting-card" id="card-client">
+                    <div class="setting-card-head">
+                        <i class="fa fa-laptop"></i><span langtag="word-clientsettings"></span>
+                    </div>
+                    <div class="setting-card-body">
+                        <div class="setting-row">
+                            <div class="setting-main">
+                                <div class="setting-title" langtag="word-allowflowlimit"></div>
+                                <div class="setting-desc" langtag="info-allowflowlimittips"></div>
+                            </div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="allowFlowLimit" value="1" class="onoffswitch-checkbox"
+                                           id="allowFlowLimit" {{if .allowFlowLimit}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="allowFlowLimit">
+                                        <span class="onoffswitch-inner"></span>
+                                        <span class="onoffswitch-switch"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row">
+                            <div class="setting-main">
+                                <div class="setting-title" langtag="word-allowratelimit"></div>
+                                <div class="setting-desc" langtag="info-allowratelimittips"></div>
+                            </div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="allowRateLimit" value="1" class="onoffswitch-checkbox"
+                                           id="allowRateLimit" {{if .allowRateLimit}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="allowRateLimit">
+                                        <span class="onoffswitch-inner"></span>
+                                        <span class="onoffswitch-switch"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row">
+                            <div class="setting-main">
+                                <div class="setting-title" langtag="word-allowconnlimit"></div>
+                                <div class="setting-desc" langtag="info-allowconnlimittips"></div>
+                            </div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="allowConnectionNumLimit" value="1"
+                                           class="onoffswitch-checkbox" id="allowConnectionNumLimit"
+                                           {{if .allowConnectionNumLimit}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="allowConnectionNumLimit">
+                                        <span class="onoffswitch-inner"></span>
+                                        <span class="onoffswitch-switch"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row">
+                            <div class="setting-main">
+                                <div class="setting-title" langtag="word-allowtunnellimit"></div>
+                                <div class="setting-desc" langtag="info-allowtunnellimittips"></div>
+                            </div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="allowTunnelNumLimit" value="1"
+                                           class="onoffswitch-checkbox" id="allowTunnelNumLimit"
+                                           {{if .allowTunnelNumLimit}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="allowTunnelNumLimit">
+                                        <span class="onoffswitch-inner"></span>
+                                        <span class="onoffswitch-switch"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row">
+                            <div class="setting-main">
+                                <div class="setting-title" langtag="word-allowmultiip"></div>
+                                <div class="setting-desc" langtag="info-allowmultiipstips"></div>
+                            </div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="allowMultiIp" value="1" class="onoffswitch-checkbox"
+                                           id="allowMultiIp" {{if .allowMultiIp}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="allowMultiIp">
+                                        <span class="onoffswitch-inner"></span>
+                                        <span class="onoffswitch-switch"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row">
+                            <div class="setting-main">
+                                <div class="setting-title" langtag="word-allowlocalproxy"></div>
+                                <div class="setting-desc" langtag="info-allowlocalproxytips"></div>
+                            </div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="allowLocalProxy" value="1" class="onoffswitch-checkbox"
+                                           id="allowLocalProxy" {{if .allowLocalProxy}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="allowLocalProxy">
+                                        <span class="onoffswitch-inner"></span>
+                                        <span class="onoffswitch-switch"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+<div class="setting-card" id="card-login">
+                    <div class="setting-card-head">
+                        <i class="fa fa-user-lock"></i><span langtag="word-loginsettings"></span>
+                    </div>
+                    <div class="setting-card-body">
+                        <div class="setting-row">
+                            <div class="setting-main">
+                                <div class="setting-title" langtag="word-allowuserlogin"></div>
+                                <div class="setting-desc" langtag="info-allowuserlogintips"></div>
+                            </div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="allowUserLogin" value="1" class="onoffswitch-checkbox"
+                                           id="allowUserLogin" {{if .allowUserLogin}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="allowUserLogin">
+                                        <span class="onoffswitch-inner"></span>
+                                        <span class="onoffswitch-switch"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row">
+                            <div class="setting-main">
+                                <div class="setting-title" langtag="word-allowuserregister"></div>
+                                <div class="setting-desc" langtag="info-allowuserregistertips"></div>
+                            </div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="allowUserRegister" value="1"
+                                           class="onoffswitch-checkbox" id="allowUserRegister"
+                                           {{if .allowUserRegister}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="allowUserRegister">
+                                        <span class="onoffswitch-inner"></span>
+                                        <span class="onoffswitch-switch"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row">
+                            <div class="setting-main">
+                                <div class="setting-title" langtag="word-allowuserchangeusername"></div>
+                                <div class="setting-desc" langtag="info-allowuserchangeusernametips"></div>
+                            </div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="allowUserChangeUsername" value="1"
+                                           class="onoffswitch-checkbox" id="allowUserChangeUsername"
+                                           {{if .allowUserChangeUsername}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="allowUserChangeUsername">
+                                        <span class="onoffswitch-inner"></span>
+                                        <span class="onoffswitch-switch"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row">
+                            <div class="setting-main">
+                                <div class="setting-title" langtag="word-captcha"></div>
+                                <div class="setting-desc" langtag="info-captchatips"></div>
+                            </div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="openCaptcha" value="1" class="onoffswitch-checkbox"
+                                           id="openCaptcha" {{if .openCaptcha}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="openCaptcha">
+                                        <span class="onoffswitch-inner"></span>
+                                        <span class="onoffswitch-switch"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+<div class="setting-card" id="card-display">
+                    <div class="setting-card-head">
+                        <i class="fa fa-chart-line"></i><span langtag="word-displaysettings"></span>
+                    </div>
+                    <div class="setting-card-body">
+                        <div class="setting-row">
+                            <div class="setting-main">
+                                <div class="setting-title" langtag="word-systeminfo"></div>
+                                <div class="setting-desc" langtag="info-systeminfotips"></div>
+                            </div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="systemInfoDisplay" value="1" class="onoffswitch-checkbox"
+                                           id="systemInfoDisplay" {{if .systemInfoDisplay}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="systemInfoDisplay">
+                                        <span class="onoffswitch-inner"></span>
+                                        <span class="onoffswitch-switch"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="setting-row">
+                            <div class="setting-main">
+                                <div class="setting-title" langtag="word-addoriginheader"></div>
+                                <div class="setting-desc" langtag="info-addoriginheadertips"></div>
+                            </div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="httpAddOriginHeader" value="1" class="onoffswitch-checkbox"
+                                           id="httpAddOriginHeader" {{if .httpAddOriginHeader}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="httpAddOriginHeader">
+                                        <span class="onoffswitch-inner"></span>
+                                        <span class="onoffswitch-switch"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+<div class="setting-card" id="card-ops">
+                    <div class="setting-card-head">
+                        <i class="fa fa-tools"></i><span langtag="word-ops">运维</span>
+                    </div>
+                    <div class="setting-card-body">
+                        <div class="setting-field"><label langtag="word-errorpagebrand"></label>
+                            <input class="form-control" type="text" name="httpErrorPageBrand" value="{{.httpErrorPageBrand}}" maxlength="64"></div>
+                        <div class="setting-field"><label langtag="word-errorpagebrandurl"></label>
+                            <input class="form-control" type="text" name="httpErrorPageBrandUrl" value="{{.httpErrorPageBrandUrl}}"></div>
+                        <div class="setting-field"><label langtag="word-releaseapiurl"></label>
+                            <input class="form-control" type="text" name="releaseApiUrl" value="{{.releaseApiUrl}}"></div>
+                        <div class="setting-field"><label langtag="word-releasedownloadbase"></label>
+                            <input class="form-control" type="text" name="releaseDownloadBase" value="{{.releaseDownloadBase}}"></div>
+                        <div class="setting-field">
+                            <label langtag="word-releaseeffective"></label>
+                            <div class="form-control-plaintext small text-muted" style="word-break:break-all;">
+                                <div><span langtag="word-releaseapiurl"></span>：{{.releaseApiUrlEffective}}</div>
+                                <div><span langtag="word-releasedownloadbase"></span>：{{.releaseDownloadBaseEffective}}</div>
+                            </div>
+                            <div class="setting-desc" langtag="info-releaseeffective"></div>
+                        </div>
+                    </div>
+                </div>
+
+<div class="setting-card" id="card-runtime">
+                    <div class="setting-card-head">
+                        <i class="fa fa-shield-alt"></i><span langtag="word-runtimesecurity"></span>
+                    </div>
+                    <div class="setting-card-body">
+                        <div class="setting-row">
+                            <div class="setting-main">
+                                <div class="setting-title" langtag="word-allowxrealip"></div>
+                                <div class="setting-desc" langtag="info-allowxrealip"></div>
+                            </div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="allowXRealIp" value="1" class="onoffswitch-checkbox"
+                                           id="allowXRealIp" {{if .allowXRealIp}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="allowXRealIp">
+                                        <span class="onoffswitch-inner"></span><span class="onoffswitch-switch"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <div class="setting-main">
+                                <div class="setting-title" langtag="word-allowremoteupdate"></div>
+                                <div class="setting-desc" langtag="info-allowremoteupdate"></div>
+                            </div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="allowRemoteUpdate" value="1" class="onoffswitch-checkbox"
+                                           id="allowRemoteUpdate" {{if .allowRemoteUpdate}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="allowRemoteUpdate">
+                                        <span class="onoffswitch-inner"></span><span class="onoffswitch-switch"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <div class="setting-main">
+                                <div class="setting-title" langtag="word-allowwebterminal"></div>
+                                <div class="setting-desc" langtag="info-allowwebterminal"></div>
+                            </div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="allowWebTerminal" value="1" class="onoffswitch-checkbox"
+                                           id="allowWebTerminal" {{if .allowWebTerminal}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="allowWebTerminal">
+                                        <span class="onoffswitch-inner"></span><span class="onoffswitch-switch"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="setting-field">
+                            <label langtag="word-maxclients"></label>
+                            <input class="form-control" type="number" min="0" name="maxClients" value="{{.maxClients}}">
+                            <span class="help-block m-b-none" langtag="info-maxclients"></span>
+                        </div>
+                        <div class="setting-field">
+                            <label langtag="word-maxtunnelsperclient"></label>
+                            <input class="form-control" type="number" min="0" name="maxTunnelsPerClient" value="{{.maxTunnelsPerClient}}">
+                            <span class="help-block m-b-none" langtag="info-maxtunnelsperclient"></span>
+                        </div>
+                        <div class="setting-field">
+                            <label langtag="word-maxglobalconn"></label>
+                            <input class="form-control" type="number" min="0" name="maxGlobalConn" value="{{.maxGlobalConn}}">
+                            <span class="help-block m-b-none" langtag="info-maxglobalconn"></span>
+                        </div>
+                    </div>
+                </div>
+
+<div class="setting-card" id="card-waf">
+                    <div class="setting-card-head">
+                        <i class="fa fa-fire"></i><span langtag="word-wafswitches"></span>
+                    </div>
+                    <div class="setting-card-body">
+                        <p class="help-block" langtag="info-wafswitches"></p>
+                        <div class="setting-row">
+                            <div class="setting-main"><div class="setting-title" langtag="word-wafenable"></div></div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="wafEnable" value="1" class="onoffswitch-checkbox" id="wafEnable" {{if .wafEnable}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="wafEnable"><span class="onoffswitch-inner"></span><span class="onoffswitch-switch"></span></label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <div class="setting-main"><div class="setting-title" langtag="word-wafprotectpanel"></div></div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="wafProtectPanel" value="1" class="onoffswitch-checkbox" id="wafProtectPanel" {{if .wafProtectPanel}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="wafProtectPanel"><span class="onoffswitch-inner"></span><span class="onoffswitch-switch"></span></label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <div class="setting-main"><div class="setting-title" langtag="word-wafuablacklist"></div></div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="wafUABlacklistEnable" value="1" class="onoffswitch-checkbox" id="wafUABlacklistEnable" {{if .wafUABlacklistEnable}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="wafUABlacklistEnable"><span class="onoffswitch-inner"></span><span class="onoffswitch-switch"></span></label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <div class="setting-main"><div class="setting-title" langtag="word-wafblockforeign"></div></div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="wafBlockForeignEnable" value="1" class="onoffswitch-checkbox" id="wafBlockForeignEnable" {{if .wafBlockForeignEnable}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="wafBlockForeignEnable"><span class="onoffswitch-inner"></span><span class="onoffswitch-switch"></span></label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <div class="setting-main"><div class="setting-title" langtag="word-wafcustomrules"></div></div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="wafCustomRulesEnable" value="1" class="onoffswitch-checkbox" id="wafCustomRulesEnable" {{if .wafCustomRulesEnable}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="wafCustomRulesEnable"><span class="onoffswitch-inner"></span><span class="onoffswitch-switch"></span></label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <div class="setting-main"><div class="setting-title" langtag="word-wafblockunknown"></div></div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="wafBlockForeignUnknown" value="1" class="onoffswitch-checkbox" id="wafBlockForeignUnknown" {{if .wafBlockForeignUnknown}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="wafBlockForeignUnknown"><span class="onoffswitch-inner"></span><span class="onoffswitch-switch"></span></label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="setting-field">
+                            <label langtag="word-wafcountryheaders"></label>
+                            <input class="form-control" type="text" name="wafCountryHeaders" value="{{.wafCountryHeaders}}">
+                        </div>
+                    </div>
+                </div>
+
+<div class="setting-card" id="card-smtp">
+                    <div class="setting-card-head">
+                        <i class="fa fa-envelope"></i><span langtag="word-registersmtp"></span>
+                    </div>
+                    <div class="setting-card-body">
+                        <div class="setting-field">
+                            <label langtag="word-registerratelimit"></label>
+                            <input class="form-control" type="number" min="0" name="registerRateLimit" value="{{.registerRateLimit}}">
+                            <span class="help-block m-b-none" langtag="info-registerratelimit"></span>
+                        </div>
+                        <div class="setting-row">
+                            <div class="setting-main">
+                                <div class="setting-title" langtag="word-registeremailverify"></div>
+                                <div class="setting-desc" langtag="info-registeremailverify"></div>
+                            </div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="registerEmailVerify" value="1" class="onoffswitch-checkbox"
+                                           id="registerEmailVerify" {{if .registerEmailVerify}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="registerEmailVerify">
+                                        <span class="onoffswitch-inner"></span><span class="onoffswitch-switch"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="setting-field"><label>SMTP Host</label>
+                            <input class="form-control" type="text" name="smtpHost" value="{{.smtpHost}}"></div>
+                        <div class="setting-field"><label>SMTP Port</label>
+                            <input class="form-control" type="number" min="1" max="65535" name="smtpPort" value="{{.smtpPort}}"></div>
+                        <div class="setting-field"><label>SMTP Security</label>
+                            <select class="form-control" name="smtpSecurity">
+                                <option value="starttls" {{if eq .smtpSecurity "starttls"}}selected{{end}}>starttls</option>
+                                <option value="ssl" {{if eq .smtpSecurity "ssl"}}selected{{end}}>ssl</option>
+                                <option value="none" {{if eq .smtpSecurity "none"}}selected{{end}}>none</option>
+                            </select></div>
+                        <div class="setting-field"><label>SMTP User</label>
+                            <input class="form-control" type="text" name="smtpUser" value="{{.smtpUser}}" autocomplete="off"></div>
+                        <div class="setting-field"><label>SMTP Pass</label>
+                            <input class="form-control" type="password" name="smtpPass" value="" placeholder="{{if .smtpPassSet}}******{{end}}" autocomplete="new-password">
+                            <span class="help-block m-b-none" langtag="info-secretkeep"></span></div>
+                        <div class="setting-field"><label>SMTP From</label>
+                            <input class="form-control" type="text" name="smtpFrom" value="{{.smtpFrom}}"></div>
+                    </div>
+                </div>
+
+<div class="setting-card" id="card-notify">
+                    <div class="setting-card-head">
+                        <i class="fa fa-bell"></i><span langtag="word-notifyops">通知</span>
+                    </div>
+                    <div class="setting-card-body">
+                        <div class="setting-row">
+                            <div class="setting-main"><div class="setting-title" langtag="word-notifyenable"></div></div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="notifyEnable" value="1" class="onoffswitch-checkbox" id="notifyEnable" {{if .notifyEnable}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="notifyEnable"><span class="onoffswitch-inner"></span><span class="onoffswitch-switch"></span></label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="setting-row">
+                            <div class="setting-main"><div class="setting-title" langtag="word-notifypublicclient"></div></div>
+                            <div class="setting-control">
+                                <div class="onoffswitch">
+                                    <input type="checkbox" name="notifyPublicClient" value="1" class="onoffswitch-checkbox" id="notifyPublicClient" {{if .notifyPublicClient}}checked{{end}}>
+                                    <label class="onoffswitch-label" for="notifyPublicClient"><span class="onoffswitch-inner"></span><span class="onoffswitch-switch"></span></label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="setting-field"><label langtag="word-notifytitleprefix"></label>
+                            <input class="form-control" type="text" name="notifyTitlePrefix" value="{{.notifyTitlePrefix}}"></div>
+                        <div class="setting-field"><label langtag="word-notifymininterval"></label>
+                            <input class="form-control" type="number" min="0" name="notifyMinInterval" value="{{.notifyMinInterval}}"></div>
+                        <div class="setting-field"><label langtag="word-notifyerrorinterval"></label>
+                            <input class="form-control" type="number" min="0" name="notifyErrorPageMinInterval" value="{{.notifyErrorPageMinInterval}}"></div>
+                        <div class="setting-field"><label langtag="word-notifyqueuesize"></label>
+                            <input class="form-control" type="number" min="1" name="notifyQueueSize" value="{{.notifyQueueSize}}"></div>
+                        <div class="setting-field"><label langtag="word-notifyhttptimeout"></label>
+                            <input class="form-control" type="number" min="1" name="notifyHttpTimeout" value="{{.notifyHttpTimeout}}"></div>
+                        <div class="setting-field"><label>WeCom Webhook</label>
+                            <input class="form-control" type="password" name="notifyWecomWebhook" value="" placeholder="{{if .notifyWecomSet}}******{{end}}" autocomplete="off">
+                            <span class="help-block m-b-none" langtag="info-secretkeep"></span></div>
+                        <div class="setting-field"><label>Telegram Bot Token</label>
+                            <input class="form-control" type="password" name="notifyTelegramBotToken" value="" placeholder="{{if .notifyTelegramTokenSet}}******{{end}}" autocomplete="off"></div>
+                        <div class="setting-field"><label>Telegram Chat ID</label>
+                            <input class="form-control" type="text" name="notifyTelegramChatId" value="{{.notifyTelegramChatId}}"></div>
+                        <div class="setting-field"><label>Webhook URL</label>
+                            <input class="form-control" type="password" name="notifyWebhookUrl" value="" placeholder="{{if .notifyWebhookUrlSet}}******{{end}}" autocomplete="off"></div>
+                        <div class="setting-field"><label>Webhook Header</label>
+                            <textarea class="form-control" rows="2" name="notifyWebhookHeader" placeholder="Name: Value"></textarea>
+                            <span class="help-block m-b-none" langtag="info-secretkeep"></span></div>
+                    </div>
+                </div>
+
+                <div class="setting-card" id="card-geo">
+                    <div class="setting-card-head">
+                        <i class="fa fa-globe"></i>Geo 数据
+                    </div>
+                    <div class="setting-card-body">
+                        <p class="help-block" style="margin-top:8px;">离线 geoip.dat / geosite.dat（Loyalsoldier v2ray-rules-dat）。WAF「禁国外」与后续 ACL 共用。勿将二进制提交进 git；可用下方按钮或 <code>nps -updategeo</code> 更新。</p>
+                        <div class="setting-row">
+                            <div class="setting-main"><div class="setting-title">版本</div></div>
+                            <div class="setting-control">{{if .geo.Version}}{{.geo.Version}}{{else}}未知{{end}}</div>
+                        </div>
+                        <div class="setting-row">
+                            <div class="setting-main"><div class="setting-title">内存已加载</div></div>
+                            <div class="setting-control">{{if .geo.Loaded}}是{{else}}否{{end}}</div>
+                        </div>
+                        {{range .geo.Files}}
+                        <div class="setting-row">
+                            <div class="setting-main">
+                                <div class="setting-title">{{.Name}}</div>
+                                <div class="setting-desc"><code>{{.Path}}</code></div>
+                            </div>
+                            <div class="setting-control">
+                                {{if .Exists}}{{.ModTime}} · {{.SizeHuman}}{{else}}<span class="text-danger">文件缺失</span>{{end}}
+                            </div>
+                        </div>
+                        {{end}}
+                        <button class="btn btn-primary btn-sm" onclick="updateGeoData(this)" type="button" style="margin-top:8px;">
+                            <i class="fa fa-fw fa-cloud-download-alt"></i> 更新 Geo 数据
+                        </button>
+                    </div>
+                </div>
+        </div>
+    </form>
+</div>
+<script>
+function updateGeoData(btn) {
+    var $btn = $(btn);
+    if ($btn.data('busy')) return;
+    if (!confirm('从上游下载最新 geoip.dat / geosite.dat？可能需要较长时间。')) return;
+    $btn.data('busy', true).addClass('disabled');
+    $btn.find('i').attr('class', 'fa fa-fw fa-lg fa-spinner fa-spin');
+    $.ajax({
+        type: 'POST',
+        url: '{{.web_base_url}}/global/updategeodata',
+        success: function (res) {
+            if (res && res.status) {
+                showMsg(res.msg || 'ok', 'success', 1500, function () { document.location.reload(); });
+                return;
+            }
+            showMsg((res && res.msg) || 'error', 'error', 8000);
+        },
+        error: function (xhr, textStatus) {
+            showMsg(xhr.statusText || textStatus || 'error', 'error', 8000);
+        },
+        complete: function () {
+            $btn.data('busy', false).removeClass('disabled');
+            $btn.find('i').attr('class', 'fa fa-fw fa-lg fa-cloud-download-alt');
+        }
+    });
+}
+$(function () {
+    var $page = $(".global-param-page");
+    var $hero = $("#global-param-hero");
+
+    function syncGlobalHeroFixed() {
+        if (!$page.length || !$hero.length) return;
+        var top = window.matchMedia("(max-width: 767px)").matches ? 56 : 62;
+        var rect = $page[0].getBoundingClientRect();
+        $hero.css({ top: top + "px", left: rect.left + "px", width: Math.max(0, rect.width) + "px" });
+        /* 用页面 padding 占位，不再给 slot 写 height，避免条下多一块等高空白 */
+        $page.css("padding-top", (($hero.outerHeight() || 0) + 16) + "px");
+    }
+
+    syncGlobalHeroFixed();
+    $(window).on("resize orientationchange", syncGlobalHeroFixed);
+    $(document).on("click", ".navbar-minimalize, .close-canvas-menu", function () {
+        setTimeout(syncGlobalHeroFixed, 200);
+    });
+    if (window.ResizeObserver) {
+        new ResizeObserver(syncGlobalHeroFixed).observe($page[0]);
+    }
+
+    $("#global-jump-nav").on("click", "a[href^='#']", function (e) {
+        var id = $(this).attr("href");
+        var $t = $(id);
+        if (!$t.length) return;
+        e.preventDefault();
+        syncGlobalHeroFixed();
+        var topBar = window.matchMedia("(max-width: 767px)").matches ? 56 : 62;
+        var top = $t.offset().top - ($hero.outerHeight() || 0) - topBar - 12;
+        $("html, body").animate({ scrollTop: Math.max(0, top) }, 220);
+    });
+});
+</script>
