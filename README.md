@@ -93,7 +93,7 @@
 
 ### 1. 构建（CLI）
 
-需本机 **Go 1.24+**（holepunch / 部分 GUI 相关依赖建议 **1.26+**），并加入 `PATH`：
+需本机 **Go 1.26.11**（与 `go.mod` 一致），并加入 `PATH`：
 
 ```powershell
 cd "f:\go_lang\nps"

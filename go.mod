@@ -1,6 +1,6 @@
 module ehang.io/nps
 
-go 1.26.0
+go 1.26.11
 
 require (
 	fyne.io/fyne/v2 v2.2.0

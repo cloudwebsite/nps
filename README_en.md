@@ -29,7 +29,7 @@ This tree is the **fusion workspace**: capabilities from sibling forks are merge
 
 ### 1. Build (CLI)
 
-Need **Go 1.24+** on `PATH` (**1.26+** recommended for holepunch / some GUI deps):
+Need **Go 1.26.11** on `PATH` (matches `go.mod`):
 
 ```powershell
 cd "f:\go_lang\nps"

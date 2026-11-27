@@ -1,4 +1,4 @@
-FROM golang:1.26 AS builder
+FROM golang:1.26.11 AS builder
 ARG GOPROXY=https://proxy.golang.org,direct
 ENV GOPROXY=${GOPROXY}
 WORKDIR /go/src/ehang.io/nps

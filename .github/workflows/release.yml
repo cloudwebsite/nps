@@ -29,7 +29,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26.0"
+          go-version: "1.26.11"
           cache: true
       - name: Get dependencies
         run: go mod download
@@ -91,7 +91,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26.0"
+          go-version: "1.26.11"
           cache: true
       - name: Vendor modules (host; avoid old git inside fyne-cross)
         run: |
@@ -102,7 +102,7 @@ jobs:
           chmod +x build.android.sh
           docker run --rm -i -w /app -v "$(pwd)":/app \
             -e ANDROID_HOME=/usr/local/android_sdk \
-            -e GO_VERSION=1.26.0 \
+            -e GO_VERSION=1.26.11 \
             fyneio/fyne-cross:android-latest /app/build.android.sh
           ls -la android_client.apk
       - name: Upload

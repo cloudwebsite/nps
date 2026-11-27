@@ -26,7 +26,7 @@ bnBzOk15U2VydmVyfDEyNy4wLjAuMTo4MDI0fG15a2V5MTIzfGZhbHNl
 
 ## 前置要求
 
-- Go 1.25+（wails v3 最低要求）
+- Go 1.26.11（与仓库 `go.mod` 一致）
 - Node.js 16+
 - Yarn
 - Wails v3 CLI（wails3）

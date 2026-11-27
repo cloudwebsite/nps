@@ -67,7 +67,7 @@ npc update
 * 脚本支持通过参数指定：
 
   * **模式**：`nps` | `npc` | `all`（默认 `all`）
-  * **版本**：例如 `v0.26.41.3`，默认 `latest`
+  * **版本**：例如 `v0.26.41.4`，默认 `latest`
   * **安装目录**：指定路径时，压缩包直接解压到该目录，不会安装到系统路径
 
 * 同样支持以下环境变量：
@@ -161,7 +161,7 @@ docker run -d \
 
 ## 源码安装
 
-需要 Go 1.22 及以上（仓库 `go.mod` 中 `toolchain` 锁定为 `go1.24.9`）。
+需要 Go 1.26.11（与仓库 `go.mod` 一致）。
 
 ```shell
 git clone https://github.com/cloudwebsite/nps.git

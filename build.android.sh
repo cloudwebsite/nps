@@ -16,7 +16,7 @@ export GOPROXY=off
 export GOFLAGS="-mod=vendor"
 export GOTOOLCHAIN=local
 
-GO_VERSION="${GO_VERSION:-1.26.0}"
+GO_VERSION="${GO_VERSION:-1.26.11}"
 curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tgz
 rm -rf /usr/local/go
 tar -C /usr/local -xzf /tmp/go.tgz
